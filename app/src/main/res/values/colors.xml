@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Light palette. values-night/ holds the dark one (the default). -->
+    <color name="bg_primary">#F0F0F0</color>
+    <color name="bg_secondary">#FFFFFF</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="border">#33000000</color>
+    <color name="primary_blue">#3D52A0</color>
+    <color name="accent">#0891B2</color>
+    <color name="text_primary">#222222</color>
+    <color name="text_secondary">#555555</color>
+    <color name="text_muted">#666666</color>
+    <color name="button">#3D52A0</color>
+    <color name="error">#C0392B</color>
+    <color name="icon_bg">#0F1A2A</color>
+</resources>
