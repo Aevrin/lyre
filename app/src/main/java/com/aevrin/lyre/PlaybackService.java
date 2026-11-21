@@ -63,6 +63,16 @@ public class PlaybackService extends MediaSessionService {
         sleepAt = 0;
         if (player != null) player.pause();
     };
+    // Play counting: a track counts as played after half its length or 4 minutes of listening.
+    private String trackPath;
+    private long trackDuration, listened, playingSince;
+    private boolean counted;
+    private final Runnable playTick = new Runnable() {
+        @Override public void run() {
+            checkPlay();
+            if (playingSince > 0 && !counted) main.postDelayed(this, 5_000);
+        }
+    };
     private final Runnable saveTick = new Runnable() {
         @Override public void run() {
             saveQueue();
@@ -98,11 +108,22 @@ public class PlaybackService extends MediaSessionService {
         player.addListener(new Player.Listener() {
             @Override
             public void onMediaItemTransition(@Nullable MediaItem item, int reason) {
+                finishTrack(reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK);
                 onTrackChanged();
             }
 
             @Override
             public void onIsPlayingChanged(boolean playing) {
+                long now = SystemClock.elapsedRealtime();
+                if (playing && playingSince == 0) {
+                    playingSince = now;
+                    main.removeCallbacks(playTick);
+                    main.postDelayed(playTick, 5_000);
+                } else if (!playing && playingSince > 0) {
+                    listened += now - playingSince;
+                    playingSince = 0;
+                    checkPlay();
+                }
                 main.removeCallbacks(saveTick);
                 if (playing) main.postDelayed(saveTick, 15_000); else saveQueue();
             }
@@ -163,6 +184,11 @@ public class PlaybackService extends MediaSessionService {
     @Override
     public void onDestroy() {
         instance = null;
+        if (playingSince > 0) {
+            listened += SystemClock.elapsedRealtime() - playingSince;
+            playingSince = 0;
+        }
+        checkPlay();
         main.removeCallbacksAndMessages(null);
         saveQueue();
         closeEffectSession();
@@ -219,6 +245,35 @@ public class PlaybackService extends MediaSessionService {
         MediaItem m = player.getCurrentMediaItem();
         if (m == null) return null;
         try { return library.byId(Long.parseLong(m.mediaId)); } catch (NumberFormatException e) { return null; }
+    }
+
+    private long listenedMs() {
+        return listened + (playingSince > 0 ? SystemClock.elapsedRealtime() - playingSince : 0);
+    }
+
+    private void checkPlay() {
+        if (counted || trackPath == null) return;
+        long threshold = trackDuration > 0 ? Math.min(trackDuration / 2, 240_000) : 30_000;
+        if (listenedMs() >= threshold) {
+            counted = true;
+            ((LyreApp) getApplication()).db().addPlay(trackPath, System.currentTimeMillis());
+        }
+    }
+
+    /** Wraps up the track that's ending: count the play, or a skip if you moved on early. */
+    private void finishTrack(boolean userSkipped) {
+        checkPlay();
+        if (!counted && trackPath != null && userSkipped && listenedMs() < 30_000) {
+            ((LyreApp) getApplication()).db().addSkip(trackPath);
+        }
+        Song s = currentSong();
+        trackPath = s == null ? null : s.path;
+        trackDuration = s == null ? 0 : s.duration;
+        listened = 0;
+        counted = false;
+        playingSince = player != null && player.isPlaying() ? SystemClock.elapsedRealtime() : 0;
+        main.removeCallbacks(playTick);
+        if (playingSince > 0) main.postDelayed(playTick, 5_000);
     }
 
     private void onTrackChanged() {
@@ -306,6 +361,7 @@ public class PlaybackService extends MediaSessionService {
         int idx = Math.max(0, Math.min(prefs.savedIndex(), items.size() - 1));
         player.setMediaItems(items, idx, prefs.savedPosition());
         player.prepare();
+        finishTrack(false);
         onTrackChanged();
     }
 

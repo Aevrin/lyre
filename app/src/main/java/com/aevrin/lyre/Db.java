@@ -46,7 +46,7 @@ public final class Db extends SQLiteOpenHelper {
     }
 
     public Db(Context c) {
-        super(c, "lyre.db", null, 1);
+        super(c, "lyre.db", null, 2);
     }
 
     @Override
@@ -56,10 +56,100 @@ public final class Db extends SQLiteOpenHelper {
         db.execSQL("CREATE INDEX pi_pl ON playlist_items(playlist_id, pos)");
         db.execSQL("CREATE TABLE blacklist (_id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, value TEXT NOT NULL, label TEXT, UNIQUE(type, value))");
         db.execSQL("CREATE TABLE gains (path TEXT PRIMARY KEY, size INTEGER, mtime INTEGER, lufs REAL, peak REAL, rg_track REAL, rg_album REAL, rg_checked INTEGER DEFAULT 0)");
+        createV2(db);
     }
 
     @Override
-    public void onUpgrade(SQLiteDatabase db, int oldV, int newV) { }
+    public void onUpgrade(SQLiteDatabase db, int oldV, int newV) {
+        if (oldV < 2) createV2(db);
+    }
+
+    /** Version 2: play statistics and dynamic playlists. */
+    private static void createV2(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS plays (path TEXT PRIMARY KEY, count INTEGER NOT NULL DEFAULT 0, skips INTEGER NOT NULL DEFAULT 0, last INTEGER NOT NULL DEFAULT 0)");
+        db.execSQL("CREATE TABLE IF NOT EXISTS smart (_id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, rules TEXT NOT NULL)");
+    }
+
+    // ---------------------------------------------------------------- play stats
+
+    /** Counts a play (listened to at least half, or 4 minutes). */
+    public void addPlay(String path, long when) {
+        SQLiteDatabase db = getWritableDatabase();
+        db.execSQL("INSERT OR IGNORE INTO plays (path) VALUES (?)", new Object[]{path});
+        db.execSQL("UPDATE plays SET count = count + 1, last = ? WHERE path = ?", new Object[]{when, path});
+    }
+
+    /** Counts a skip (moved on in the first part of a track). */
+    public void addSkip(String path) {
+        SQLiteDatabase db = getWritableDatabase();
+        db.execSQL("INSERT OR IGNORE INTO plays (path) VALUES (?)", new Object[]{path});
+        db.execSQL("UPDATE plays SET skips = skips + 1 WHERE path = ?", new Object[]{path});
+    }
+
+    public java.util.Map<String, Smart.Stat> stats() {
+        java.util.Map<String, Smart.Stat> m = new java.util.HashMap<>();
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT path, count, skips, last FROM plays", null)) {
+            while (c.moveToNext()) {
+                Smart.Stat st = new Smart.Stat();
+                st.plays = c.getInt(1);
+                st.skips = c.getInt(2);
+                st.lastPlayed = c.getLong(3);
+                m.put(c.getString(0), st);
+            }
+        }
+        return m;
+    }
+
+    public Smart.Stat stat(String path) {
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT count, skips, last FROM plays WHERE path=?", new String[]{path})) {
+            if (!c.moveToFirst()) return null;
+            Smart.Stat st = new Smart.Stat();
+            st.plays = c.getInt(0);
+            st.skips = c.getInt(1);
+            st.lastPlayed = c.getLong(2);
+            return st;
+        }
+    }
+
+    public void clearStats() {
+        getWritableDatabase().delete("plays", null, null);
+    }
+
+    // ---------------------------------------------------------------- dynamic playlists
+
+    public static final class SmartRow {
+        public final long id;
+        public final Smart smart;
+        SmartRow(long id, Smart smart) { this.id = id; this.smart = smart; }
+    }
+
+    public List<SmartRow> smartPlaylists() {
+        List<SmartRow> out = new ArrayList<>();
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT _id, name, rules FROM smart ORDER BY name COLLATE NOCASE", null)) {
+            while (c.moveToNext()) out.add(new SmartRow(c.getLong(0), Smart.fromJson(c.getString(1), c.getString(2))));
+        }
+        return out;
+    }
+
+    public Smart smart(long id) {
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT name, rules FROM smart WHERE _id=?", new String[]{String.valueOf(id)})) {
+            return c.moveToFirst() ? Smart.fromJson(c.getString(0), c.getString(1)) : null;
+        }
+    }
+
+    /** Inserts when id < 0; returns the id. */
+    public long saveSmart(long id, Smart s) {
+        ContentValues v = new ContentValues();
+        v.put("name", s.name);
+        v.put("rules", s.toJson());
+        if (id < 0) return getWritableDatabase().insert("smart", null, v);
+        getWritableDatabase().update("smart", v, "_id=?", new String[]{String.valueOf(id)});
+        return id;
+    }
+
+    public void deleteSmart(long id) {
+        getWritableDatabase().delete("smart", "_id=?", new String[]{String.valueOf(id)});
+    }
 
     // ---------------------------------------------------------------- playlists
 
@@ -157,6 +247,7 @@ public final class Db extends SQLiteOpenHelper {
         ContentValues v = new ContentValues();
         v.put("path", newPath);
         getWritableDatabase().update("playlist_items", v, "path=?", new String[]{oldPath});
+        getWritableDatabase().updateWithOnConflict("plays", v, "path=?", new String[]{oldPath}, SQLiteDatabase.CONFLICT_IGNORE);
     }
 
     // ---------------------------------------------------------------- blacklist

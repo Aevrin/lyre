@@ -35,6 +35,13 @@ A small, private, open-source music player for Android, in the spirit of Shuttle
   Uses jaudiotagger: MP3, FLAC, Ogg Vorbis, M4A/MP4, WMA, WAV, AIFF, DSF.
 - **Playlists** with drag-to-reorder, **M3U export** (one playlist, or all of them into a
   folder) with relative or absolute paths, and **M3U import**.
+- **Dynamic playlists** that update themselves from rules: title, artist, album, album artist,
+  genre, folder, year, length, play count, skip count, last played and date added (e.g. "added
+  more than 365 days ago", "played at least 5 times", "longer than 10 minutes"). Match all or
+  any rule, pick an order (random, most played, newest added, ...) and an optional limit. Start
+  blank or from a preset; save one as a regular playlist or export it as M3U.
+  A play counts after half a track or 4 minutes of listening; a skip is pressing Next within
+  the first 30 seconds.
 - **Queue:** play next, add to queue, drag to reorder, swipe to remove, save as a playlist.
 - Shuffle, repeat, sleep timer (minutes or end of track), gapless playback, lock-screen,
   notification, Bluetooth and headset controls (Media3), resume where you left off.

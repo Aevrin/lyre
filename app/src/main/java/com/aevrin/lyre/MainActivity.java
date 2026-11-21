@@ -60,6 +60,7 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
         final int type;
         final String key;
         Parcelable scroll;
+        List<Song> cache;   // dynamic playlist contents, kept while the page is open
         Page(int type, String key) { this.type = type; this.key = key; }
     }
 
@@ -86,7 +87,8 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
     private TextView miniTitle, miniArtist;
     private ImageButton miniPlay;
     private ProgressBar miniProgress;
-    private long exportPlaylistId = -1;
+    private long exportPlaylistId = -1, exportSmartId = -1;
+    private boolean smartDirty;
     private boolean backRegistered;
     private final OnBackInvokedCallback back = this::goBack;
 
@@ -140,6 +142,10 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
         super.onStart();
         if (library.hasPermission()) remote.connect(c -> updateMini());
         main.post(tick);
+        if (smartDirty) {
+            smartDirty = false;
+            for (Page p : stack) p.cache = null;
+        }
         render();
     }
 
@@ -157,7 +163,10 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
     }
 
     @Override
-    public void onLibraryChanged() { render(); }
+    public void onLibraryChanged() {
+        for (Page p : stack) p.cache = null;
+        render();
+    }
 
     // ---------------------------------------------------------------- Actions.Host
 
@@ -479,6 +488,8 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
             case T_PLAYLISTS:
                 rows.add(RowAdapter.Row.action(R.drawable.ic_add, "New playlist", v ->
                         Ui.input(this, "New playlist", "", "Create", n -> { db.createPlaylist(n); render(); })));
+                rows.add(RowAdapter.Row.action(R.drawable.ic_smart, "New dynamic playlist", v ->
+                        Ui.choose(this, "Start from", Smart.PRESET_NAMES, -1, w -> openSmartEditor(-1, w))));
                 rows.add(RowAdapter.Row.action(R.drawable.ic_playlist, "Import M3U…", v -> {
                     Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
                             .setType("*/*")
@@ -488,6 +499,9 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
                 }));
                 rows.add(RowAdapter.Row.action(R.drawable.ic_folder, "Export all to a folder…", v ->
                         startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), REQ_EXPORT_ALL)));
+                List<Db.SmartRow> smarts = db.smartPlaylists();
+                if (!smarts.isEmpty()) rows.add(RowAdapter.Row.header("Dynamic playlists"));
+                for (Db.SmartRow sr : smarts) rows.add(smartRow(sr));
                 List<Db.Playlist> pls = db.playlists();
                 if (!pls.isEmpty()) rows.add(RowAdapter.Row.header("Playlists"));
                 for (Db.Playlist pl : pls) rows.add(playlistRow(pl));
@@ -545,6 +559,22 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
                 addSongs(rows, songs, false, id);
                 if (missing == 0) adapter.setDragStarter(h -> dragger.startDrag(h));
                 empty = "Empty playlist. Add songs from their ⋮ menu.";
+                break;
+            }
+            case Actions.SMART: {
+                long id = Long.parseLong(p.key);
+                Smart sm = db.smart(id);
+                detail = true;
+                if (sm == null) { empty = "This playlist was deleted."; headerTitle.setText(""); headerSub.setText(""); break; }
+                if (p.cache == null) p.cache = sm.evaluate(library.songs(), db.stats(), System.currentTimeMillis());
+                List<Song> songs = p.cache;
+                pageSongs = songs;
+                long dur = 0;
+                for (Song s : songs) dur += s.duration;
+                headerTitle.setText(sm.name);
+                headerSub.setText(Library.plural(songs.size(), "song") + " · " + Library.time(dur) + " · " + sm.describe());
+                addSongs(rows, songs, false, null);
+                empty = "No songs match these rules yet.";
                 break;
             }
             case SEARCH: {
@@ -629,6 +659,87 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
         return r;
     }
 
+    private RowAdapter.Row smartRow(Db.SmartRow sr) {
+        RowAdapter.Row r = new RowAdapter.Row();
+        r.type = RowAdapter.GROUP;
+        r.t1 = sr.smart.name;
+        r.t2 = sr.smart.describe();
+        r.icon = R.drawable.ic_smart;
+        r.click = v -> push(new Page(Actions.SMART, String.valueOf(sr.id)));
+        r.menu = anchor -> smartMenu(anchor, sr.id);
+        return r;
+    }
+
+    private void openSmartEditor(long id, int preset) {
+        smartDirty = true;
+        startActivity(new Intent(this, SmartEditorActivity.class)
+                .putExtra(SmartEditorActivity.EXTRA_ID, id)
+                .putExtra(SmartEditorActivity.EXTRA_PRESET, preset));
+    }
+
+    /** Current contents of a dynamic playlist (the open page's, so Play matches what you see). */
+    private List<Song> smartSongs(long id) {
+        Page t = top();
+        if (t.type == Actions.SMART && t.key.equals(String.valueOf(id)) && t.cache != null) return t.cache;
+        Smart sm = db.smart(id);
+        return sm == null ? new ArrayList<>() : sm.evaluate(library.songs(), db.stats(), System.currentTimeMillis());
+    }
+
+    private void smartMenu(View anchor, long id) {
+        Smart sm = db.smart(id);
+        if (sm == null) return;
+        PopupMenu m = new PopupMenu(this, anchor);
+        m.getMenu().add(0, 1, 0, "Play");
+        m.getMenu().add(0, 2, 0, "Shuffle");
+        m.getMenu().add(0, 3, 0, "Play next");
+        m.getMenu().add(0, 4, 0, "Add to queue");
+        m.getMenu().add(0, 5, 0, "Edit rules");
+        m.getMenu().add(0, 6, 0, "Refresh");
+        m.getMenu().add(0, 7, 0, "Save as regular playlist");
+        m.getMenu().add(0, 8, 0, "Export M3U…");
+        m.getMenu().add(0, 9, 0, "Delete");
+        m.setOnMenuItemClickListener(it -> {
+            switch (it.getItemId()) {
+                case 1: remote.play(smartSongs(id), 0, false); break;
+                case 2: remote.play(smartSongs(id), 0, true); break;
+                case 3: remote.playNext(smartSongs(id)); break;
+                case 4: remote.enqueue(smartSongs(id)); break;
+                case 5: openSmartEditor(id, 0); break;
+                case 6: for (Page p : stack) p.cache = null; render(); break;
+                case 7: {
+                    List<Song> songs = smartSongs(id);
+                    Ui.input(this, "Save as playlist", sm.name, "Save", n -> {
+                        long pid = db.createPlaylist(n);
+                        List<String> paths = new ArrayList<>();
+                        for (Song s : songs) paths.add(s.path);
+                        db.addToPlaylist(pid, paths);
+                        Ui.toast(this, "Saved " + Library.plural(paths.size(), "song"));
+                        render();
+                    });
+                    break;
+                }
+                case 8:
+                    exportSmartId = id;
+                    exportPlaylistId = -1;
+                    startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
+                            .addCategory(Intent.CATEGORY_OPENABLE)
+                            .setType(PlaylistIo.MIME)
+                            .putExtra(Intent.EXTRA_TITLE, PlaylistIo.safeName(sm.name) + ".m3u"), REQ_EXPORT);
+                    break;
+                case 9:
+                    Ui.confirm(this, "Delete dynamic playlist?", "\"" + sm.name + "\" will be deleted. Your music files aren't touched.",
+                            "Delete", () -> {
+                                db.deleteSmart(id);
+                                if (top().type == Actions.SMART) goBack(); else render();
+                            });
+                    break;
+                default: return false;
+            }
+            return true;
+        });
+        m.show();
+    }
+
     private RowAdapter.Row playlistRow(Db.Playlist pl) {
         RowAdapter.Row r = new RowAdapter.Row();
         r.type = RowAdapter.GROUP;
@@ -646,6 +757,8 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
         Page p = top();
         if (p.type == Actions.PLAYLIST) {
             playlistMenu(anchor, Long.parseLong(p.key), db.playlistName(Long.parseLong(p.key)));
+        } else if (p.type == Actions.SMART) {
+            smartMenu(anchor, Long.parseLong(p.key));
         } else if (pageGroup != null) {
             Actions.group(this, anchor, p.type, pageGroup);
         }
@@ -670,6 +783,7 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
                 case 5: Ui.input(this, "Rename playlist", name, "Rename", n -> { db.renamePlaylist(id, n); render(); }); break;
                 case 6:
                     exportPlaylistId = id;
+                    exportSmartId = -1;
                     startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
                             .addCategory(Intent.CATEGORY_OPENABLE)
                             .setType(PlaylistIo.MIME)
@@ -729,8 +843,9 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
         if (res != RESULT_OK || data == null || data.getData() == null) return;
         Uri uri = data.getData();
         try {
-            if (req == REQ_EXPORT && exportPlaylistId >= 0) {
-                List<Song> songs = library.resolve(db.playlistPaths(exportPlaylistId));
+            if (req == REQ_EXPORT && (exportPlaylistId >= 0 || exportSmartId >= 0)) {
+                List<Song> songs = exportSmartId >= 0 ? smartSongs(exportSmartId)
+                        : library.resolve(db.playlistPaths(exportPlaylistId));
                 PlaylistIo.export(getContentResolver(), uri, songs, prefs.m3uRelative());
                 Ui.toast(this, "Exported " + Library.plural(songs.size(), "song"));
             } else if (req == REQ_IMPORT) {
@@ -746,6 +861,11 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
                 for (Db.Playlist pl : db.playlists()) {
                     PlaylistIo.exportToTree(getContentResolver(), uri, pl.name,
                             library.resolve(db.playlistPaths(pl.id)), prefs.m3uRelative());
+                    n++;
+                }
+                for (Db.SmartRow sr : db.smartPlaylists()) {
+                    PlaylistIo.exportToTree(getContentResolver(), uri, sr.smart.name,
+                            sr.smart.evaluate(library.songs(), db.stats(), System.currentTimeMillis()), prefs.m3uRelative());
                     n++;
                 }
                 Ui.toast(this, "Exported " + Library.plural(n, "playlist"));

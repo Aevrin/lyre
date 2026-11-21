@@ -30,7 +30,7 @@ final class Actions {
     }
 
     // Group kinds, also used as page types in MainActivity.
-    static final int ALBUM = 1, ARTIST = 2, GENRE = 3, FOLDER = 4, PLAYLIST = 5;
+    static final int ALBUM = 1, ARTIST = 2, GENRE = 3, FOLDER = 4, PLAYLIST = 5, SMART = 6;
 
     /** Menu for one song. extra lets the caller add items (e.g. "Remove from playlist"). */
     static void song(Host h, View anchor, Song s, String extraLabel, Runnable extra) {
@@ -177,6 +177,11 @@ final class Actions {
                 + "\nSize: " + String.format(java.util.Locale.ROOT, "%.1f MB", s.size / 1048576.0)
                 + "\nFile: " + s.path;
         Db.Gain g = LyreApp.get().db().gain(s);
+        Smart.Stat st = LyreApp.get().db().stat(s.path);
+        msg += "\nPlays: " + (st == null ? 0 : st.plays) + (st != null && st.skips > 0 ? " (skipped " + st.skips + ")" : "");
+        if (st != null && st.lastPlayed > 0) {
+            msg += "\nLast played: " + android.text.format.DateUtils.getRelativeTimeSpanString(st.lastPlayed);
+        }
         if (g != null) {
             if (!Float.isNaN(g.lufs)) msg += String.format(java.util.Locale.ROOT, "\nLoudness: %.1f LUFS", g.lufs);
             if (!Float.isNaN(g.rgTrack)) msg += String.format(java.util.Locale.ROOT, "\nReplayGain track: %+.2f dB", g.rgTrack);

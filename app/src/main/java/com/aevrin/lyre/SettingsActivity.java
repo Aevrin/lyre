@@ -168,6 +168,11 @@ public class SettingsActivity extends Activity implements Library.Listener {
         String[] minNames = {"Show all", "10 seconds", "30 seconds", "1 minute"};
         choice("Hide tracks shorter than", minNames, indexOf(mins, prefs.minSeconds()), null,
                 w -> { prefs.minSeconds(mins[w]); library.reload(); });
+        LinearLayout pc = buttons();
+        pc.addView(Ui.button(this, "Reset play counts", v -> Ui.confirm(this, "Reset play counts?",
+                "Play counts, skips and last-played dates are cleared. Dynamic playlists that use them will change.",
+                "Reset", () -> { db.clearStats(); Ui.toast(this, "Play counts reset"); })));
+        content.addView(pc);
         note("Lyre uses Android's media scanner, so new files appear once Android has found them. "
                 + "Tap the Lyre title on the main screen to reload.");
 
