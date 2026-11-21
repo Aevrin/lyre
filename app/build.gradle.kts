@@ -75,7 +75,7 @@ dependencies {
     // Playback engine, lock-screen/notification/Bluetooth controls. Apache-2.0.
     implementation("androidx.media3:media3-exoplayer:$media3")
     implementation("androidx.media3:media3-session:$media3")
-    implementation("androidx.annotation:annotation:1.9.1")
+    implementation("androidx.annotation:annotation:1.11.0")
     // Scrolling lists. Apache-2.0.
     implementation("androidx.recyclerview:recyclerview:1.4.0")
     // Reading and writing tags (ID3, Vorbis/FLAC, MP4, ...). LGPL-2.1.
