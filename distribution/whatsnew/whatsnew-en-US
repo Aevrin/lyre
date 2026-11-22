@@ -1,4 +1,4 @@
-• Fixed: shuffle and repeat were cut off the Now Playing screen on narrower displays.
+• Shuffle and repeat on Now Playing are now always clearly visible; when on they turn the accent color with a highlight.
 • Car stereos and Bluetooth head units can browse your library: artists, albums, genres, playlists (incl. favorites and dynamic), folders and songs. Picking a song plays its album or playlist from there.
 • Shuffle and repeat buttons on the notification and lock screen.
 • Reversible sorts; hide tracks longer than a set length.

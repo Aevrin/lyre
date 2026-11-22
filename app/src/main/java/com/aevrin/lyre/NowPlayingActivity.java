@@ -341,14 +341,33 @@ public class NowPlayingActivity extends Activity implements Actions.Host {
         }
         play.setImageResource(c.getPlayWhenReady() ? R.drawable.ic_pause : R.drawable.ic_play);
         updateHeart(s);
-        shuffle.setAlpha(c.getShuffleModeEnabled() ? 1f : 0.6f);
-        shuffle.setImageTintList(c.getShuffleModeEnabled() ? ColorStateList.valueOf(Ui.color(this, R.color.accent)) : null);
+        modeLook(shuffle, c.getShuffleModeEnabled());
         int r = c.getRepeatMode();
         repeat.setImageResource(r == Player.REPEAT_MODE_ONE ? R.drawable.ic_repeat_one : R.drawable.ic_repeat);
-        repeat.setAlpha(r == Player.REPEAT_MODE_OFF ? 0.6f : 1f);
-        repeat.setImageTintList(r == Player.REPEAT_MODE_OFF ? null : ColorStateList.valueOf(Ui.color(this, R.color.accent)));
+        modeLook(repeat, r != Player.REPEAT_MODE_OFF);
         updatePosition();
         updateStatus();
+    }
+
+    /**
+     * Shuffle/repeat are always fully visible: off is the normal icon color; on is the
+     * accent color on a tinted circle, so the state reads at a glance.
+     */
+    private void modeLook(ImageButton b, boolean on) {
+        b.setAlpha(1f);
+        b.setImageTintList(ColorStateList.valueOf(Ui.color(this, on ? R.color.accent : R.color.text_primary)));
+        if (on) {
+            android.graphics.drawable.GradientDrawable circle = new android.graphics.drawable.GradientDrawable();
+            circle.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+            circle.setColor((Ui.color(this, R.color.accent) & 0x00FFFFFF) | 0x33000000);
+            android.graphics.drawable.InsetDrawable inset = new android.graphics.drawable.InsetDrawable(circle,
+                    0, Ui.dp(this, 2), 0, Ui.dp(this, 2));
+            b.setBackground(new android.graphics.drawable.LayerDrawable(new android.graphics.drawable.Drawable[]{
+                    inset, Ui.ripple(this, true)}));
+        } else {
+            b.setBackground(Ui.ripple(this, true));
+        }
+        b.setContentDescription((b == shuffle ? "Shuffle " : "Repeat ") + (on ? "on" : "off"));
     }
 
     private void updatePosition() {
