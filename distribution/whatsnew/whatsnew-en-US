@@ -1,4 +1,4 @@
-• Files that won't play are skipped automatically, with a short message.
-• Find unplayable files (Settings → Library): unsupported formats like WMA, files that failed to play, and (full check) damaged files. Remove them to Android's trash or hide them.
-• Tag editor suggests artists from your library as you type.
-• Find duplicates and dynamic playlists.
+• Fixed: "Measure whole library" got stuck at 0 and couldn't be stopped. Measuring is now many times faster, shows the current song, skips files that stall, and stops immediately.
+• Files that won't play are skipped automatically.
+• Find unplayable files (Settings → Library), with removal to Android's trash.
+• Tag editor suggests artists as you type.

@@ -31,6 +31,7 @@ public class SettingsActivity extends Activity implements Library.Listener {
     private LinearLayout content;
     private LinearLayout blacklistBox;
     private TextView blacklistStatus, measureStatus;
+    private android.widget.Button measureButton;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Runnable tick = new Runnable() {
         @Override public void run() {
@@ -122,12 +123,13 @@ public class SettingsActivity extends Activity implements Library.Listener {
                 prefs.analyzeAhead(), prefs::analyzeAhead);
         measureStatus = note("");
         LinearLayout mb = buttons();
-        mb.addView(Ui.button(this, "Measure whole library", v -> {
+        measureButton = Ui.button(this, "Measure whole library", v -> {
             PlaybackService svc = PlaybackService.get();
             if (svc == null) { Ui.toast(this, "Playback service isn't ready yet; try again"); return; }
             if (svc.measuring()) svc.cancelMeasureAll(); else svc.measureAll();
             updateMeasureStatus();
-        }));
+        });
+        mb.addView(measureButton);
         mb.addView(gap());
         mb.addView(Ui.button(this, "Forget measurements", v -> Ui.confirm(this, "Forget measurements?",
                 "Every track will be measured again when it next plays.", "Forget", () -> {
@@ -214,11 +216,19 @@ public class SettingsActivity extends Activity implements Library.Listener {
         PlaybackService svc = PlaybackService.get();
         String s = db.measuredCount() + " of " + library.songs().size() + " tracks measured.";
         if (svc != null && svc.measuring()) {
-            s = "Measuring… " + svc.measureDone() + " / " + svc.measureTotal()
-                    + " (tap again to stop; keeps going while Lyre is open or playing)";
+            s = "Measuring… " + svc.measureDone() + " / " + svc.measureTotal();
+            String cur = svc.measureCurrent();
+            if (!cur.isEmpty()) s += "\nNow: " + cur;
+            if (svc.measureFailed() > 0) s += "\n" + svc.measureFailed() + " couldn't be measured (skipped)";
+            s += "\nTap the button again to stop. Keeps going while Lyre is open or playing.";
+        } else if (svc != null && svc.measureFailed() > 0) {
+            s += " " + svc.measureFailed() + " couldn't be measured last run (Settings → Find unplayable files may show why).";
         }
         if (svc != null && !svc.canBoost()) s += "\nThis device can't boost volume, so quiet tracks are left as they are.";
         measureStatus.setText(s);
+        if (measureButton != null) {
+            measureButton.setText(svc != null && svc.measuring() ? "Stop measuring" : "Measure whole library");
+        }
     }
 
     // ---------------------------------------------------------------- blacklist

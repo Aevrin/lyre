@@ -51,56 +51,67 @@ public final class Loudness {
             MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
             boolean inputDone = false, outputDone = false;
             float[] scratch = new float[0];
+            int idle = 0;   // loop turns with no input or output accepted
 
             while (!outputDone) {
                 if (cancel != null && cancel.get()) return null;
-                if (!inputDone) {
-                    int in = codec.dequeueInputBuffer(10_000);
-                    if (in >= 0) {
-                        ByteBuffer buf = codec.getInputBuffer(in);
-                        int n = buf == null ? -1 : ex.readSampleData(buf, 0);
-                        if (n < 0) {
-                            codec.queueInputBuffer(in, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
-                            inputDone = true;
-                        } else {
-                            codec.queueInputBuffer(in, 0, n, ex.getSampleTime(), 0);
-                            ex.advance();
-                        }
+                boolean progressed = false;
+                // Feed every input buffer that's free, without waiting.
+                while (!inputDone) {
+                    int in = codec.dequeueInputBuffer(0);
+                    if (in < 0) break;
+                    progressed = true;
+                    ByteBuffer buf = codec.getInputBuffer(in);
+                    int n = buf == null ? -1 : ex.readSampleData(buf, 0);
+                    if (n < 0) {
+                        codec.queueInputBuffer(in, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                        inputDone = true;
+                    } else {
+                        codec.queueInputBuffer(in, 0, n, ex.getSampleTime(), 0);
+                        ex.advance();
                     }
                 }
-                int out = codec.dequeueOutputBuffer(info, 10_000);
-                if (out == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                    MediaFormat of = codec.getOutputFormat();
-                    int r = of.containsKey(MediaFormat.KEY_SAMPLE_RATE) ? of.getInteger(MediaFormat.KEY_SAMPLE_RATE) : rate;
-                    int ch = of.containsKey(MediaFormat.KEY_CHANNEL_COUNT) ? of.getInteger(MediaFormat.KEY_CHANNEL_COUNT) : channels;
-                    if (of.containsKey(MediaFormat.KEY_PCM_ENCODING)) encoding = of.getInteger(MediaFormat.KEY_PCM_ENCODING);
-                    if (r != rate || ch != channels) {
-                        rate = r;
-                        channels = ch;
-                        meter = new Meter(rate, channels);
-                    }
-                } else if (out >= 0) {
-                    ByteBuffer ob = codec.getOutputBuffer(out);
-                    if (ob != null && info.size > 0) {
-                        ob.position(info.offset);
-                        ob.limit(info.offset + info.size);
-                        ob.order(ByteOrder.nativeOrder());
-                        int samples;
-                        if (encoding == AudioFormat.ENCODING_PCM_FLOAT) {
-                            samples = info.size / 4;
-                            if (scratch.length < samples) scratch = new float[samples];
-                            ob.asFloatBuffer().get(scratch, 0, samples);
-                        } else {
-                            samples = info.size / 2;
-                            if (scratch.length < samples) scratch = new float[samples];
-                            java.nio.ShortBuffer sb = ob.asShortBuffer();
-                            for (int i = 0; i < samples; i++) scratch[i] = sb.get(i) / 32768f;
+                // Drain every decoded buffer that's ready; wait briefly only when nothing happened.
+                while (!outputDone) {
+                    int out = codec.dequeueOutputBuffer(info, progressed ? 0 : 5_000);
+                    if (out == MediaCodec.INFO_TRY_AGAIN_LATER) break;
+                    progressed = true;
+                    if (out == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                        MediaFormat of = codec.getOutputFormat();
+                        int r = of.containsKey(MediaFormat.KEY_SAMPLE_RATE) ? of.getInteger(MediaFormat.KEY_SAMPLE_RATE) : rate;
+                        int ch = of.containsKey(MediaFormat.KEY_CHANNEL_COUNT) ? of.getInteger(MediaFormat.KEY_CHANNEL_COUNT) : channels;
+                        if (of.containsKey(MediaFormat.KEY_PCM_ENCODING)) encoding = of.getInteger(MediaFormat.KEY_PCM_ENCODING);
+                        if (r != rate || ch != channels) {
+                            rate = r;
+                            channels = ch;
+                            meter = new Meter(rate, channels);
                         }
-                        meter.add(scratch, samples);
+                    } else if (out >= 0) {
+                        ByteBuffer ob = codec.getOutputBuffer(out);
+                        if (ob != null && info.size > 0) {
+                            ob.position(info.offset);
+                            ob.limit(info.offset + info.size);
+                            ob.order(ByteOrder.nativeOrder());
+                            int samples;
+                            if (encoding == AudioFormat.ENCODING_PCM_FLOAT) {
+                                samples = info.size / 4;
+                                if (scratch.length < samples) scratch = new float[samples];
+                                ob.asFloatBuffer().get(scratch, 0, samples);
+                            } else {
+                                samples = info.size / 2;
+                                if (scratch.length < samples) scratch = new float[samples];
+                                java.nio.ShortBuffer sb = ob.asShortBuffer();
+                                for (int i = 0; i < samples; i++) scratch[i] = sb.get(i) / 32768f;
+                            }
+                            meter.add(scratch, samples);
+                        }
+                        codec.releaseOutputBuffer(out, false);
+                        if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) outputDone = true;
                     }
-                    codec.releaseOutputBuffer(out, false);
-                    if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) outputDone = true;
                 }
+                // A decoder that does nothing for ~10 s won't recover; give up on this file.
+                if (progressed) idle = 0;
+                else if (++idle > 2000) throw new IllegalStateException("decoder stalled");
             }
             double lufs = meter.integrated();
             if (Double.isInfinite(lufs) || Double.isNaN(lufs)) return null;

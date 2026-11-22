@@ -409,6 +409,8 @@ public class PlaybackService extends MediaSessionService {
     public boolean measuring() { return normalizer.bulkRunning(); }
     public int measureDone() { return normalizer.bulkDone(); }
     public int measureTotal() { return normalizer.bulkTotal(); }
+    public int measureFailed() { return normalizer.bulkFailed(); }
+    public String measureCurrent() { return normalizer.bulkCurrent(); }
     public int audioSessionId() { return audioSession; }
 
     /** Pauses after this many minutes (0 cancels). */

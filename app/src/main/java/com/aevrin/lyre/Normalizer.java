@@ -193,7 +193,7 @@ final class Normalizer {
             try {
                 Db.Gain g = db.gain(s);
                 if (g != null && !Float.isNaN(g.lufs)) return;
-                float[] r = Loudness.measure(ctx, s, cancelAnalysis);
+                float[] r = measureGuarded(s, null, trackWorker);
                 if (r == null) return;
                 if (g == null) g = new Db.Gain();
                 g.lufs = r[0];
@@ -207,11 +207,88 @@ final class Normalizer {
         });
     }
 
+    // ---------------------------------------------------------------- guarded measuring
+
+    // The decode itself runs on a separate worker so a file that hangs inside Android's
+    // decoder can't block the queue: after its time budget it's abandoned (and the worker
+    // replaced if the thread won't come back), and the scan moves on.
+    private final ExecutorService[] trackWorker = {newWorker()};
+    private final ExecutorService[] bulkWorker = {newWorker()};
+    private final Set<String> failed = java.util.Collections.synchronizedSet(new HashSet<>());
+
+    private static ExecutorService newWorker() {
+        return Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(() -> {
+                Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
+                r.run();
+            }, "lyre-decode");
+            t.setDaemon(true);
+            return t;
+        });
+    }
+
+    /** Measures one file with a time limit. stop (may be null) aborts early. Null on failure. */
+    private float[] measureGuarded(Song s, AtomicBoolean stop, ExecutorService[] worker) {
+        if (failed.contains(s.path)) return null;
+        long budget = 30_000 + s.duration / 2;   // generous: 30 s plus half the track's length
+        long deadline = android.os.SystemClock.elapsedRealtime() + budget;
+        AtomicBoolean jobCancel = new AtomicBoolean();
+        java.util.concurrent.CountDownLatch finished = new java.util.concurrent.CountDownLatch(1);
+        long t0 = android.os.SystemClock.elapsedRealtime();
+        java.util.concurrent.Future<float[]> f;
+        try {
+            f = worker[0].submit(() -> {
+                try { return Loudness.measure(ctx, s, jobCancel); }
+                finally { finished.countDown(); }
+            });
+        } catch (java.util.concurrent.RejectedExecutionException e) {
+            return null;
+        }
+        while (true) {
+            try {
+                float[] r = f.get(250, java.util.concurrent.TimeUnit.MILLISECONDS);
+                long ms = android.os.SystemClock.elapsedRealtime() - t0;
+                android.util.Log.d("Lyre", "Measured " + s.path + " in " + ms + " ms: "
+                        + (r == null ? "failed" : r[0] + " LUFS"));
+                if (r == null) failed.add(s.path);
+                return r;
+            } catch (java.util.concurrent.TimeoutException e) {
+                boolean timedOut = android.os.SystemClock.elapsedRealtime() > deadline;
+                boolean stopped = (stop != null && stop.get()) || cancelAnalysis.get();
+                if (!timedOut && !stopped) continue;
+                jobCancel.set(true);
+                f.cancel(true);
+                try {
+                    // Give the decode loop a moment to notice; if it's stuck in a system call, abandon the thread.
+                    if (!finished.await(2, java.util.concurrent.TimeUnit.SECONDS)) {
+                        worker[0].shutdownNow();
+                        worker[0] = newWorker();
+                    }
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                }
+                if (timedOut) {
+                    failed.add(s.path);
+                    android.util.Log.w("Lyre", "Measuring timed out after " + budget + " ms: " + s.path);
+                }
+                return null;
+            } catch (Exception e) {
+                failed.add(s.path);
+                return null;
+            }
+        }
+    }
+
     // ---------------------------------------------------------------- measure all
+
+    private volatile String bulkCurrent = "";
+    private volatile int bulkFailed;
 
     boolean bulkRunning() { return bulkRunning; }
     int bulkDone() { return bulkDone; }
     int bulkTotal() { return bulkTotal; }
+    int bulkFailed() { return bulkFailed; }
+    String bulkCurrent() { return bulkCurrent; }
 
     /** Measures every unmeasured song in the library, one at a time in the background. */
     void measureAll(java.util.List<Song> songs) {
@@ -220,37 +297,58 @@ final class Normalizer {
         for (Song s : songs) todo.add(s);
         bulkRunning = true;
         bulkDone = 0;
+        bulkFailed = 0;
+        bulkCurrent = "";
         bulkTotal = todo.size();
-        cancelAnalysis.set(false);
-        analyzer.execute(() -> {
+        final AtomicBoolean stop = new AtomicBoolean();
+        bulkStop = stop;
+        // Runs on its own thread, not behind the per-track queue, so it starts right away.
+        Thread t = new Thread(() -> {
+            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
             try {
-                while (!todo.isEmpty() && !cancelAnalysis.get()) {
+                while (!todo.isEmpty() && !stop.get()) {
                     Song s = todo.poll();
                     Db.Gain g = db.gain(s);
                     if (g == null || Float.isNaN(g.lufs)) {
-                        float[] r = Loudness.measure(ctx, s, cancelAnalysis);
+                        bulkCurrent = s.title + " — " + s.artist;
+                        float[] r = measureGuarded(s, stop, bulkWorker);
                         if (r != null) {
+                            g = db.gain(s);
                             if (g == null) g = new Db.Gain();
                             g.lufs = r[0];
                             g.peak = r[1];
                             db.putGain(s, g);
+                        } else if (!stop.get()) {
+                            bulkFailed++;
                         }
                     }
-                    bulkDone++;
+                    if (!stop.get()) bulkDone++;
                 }
             } finally {
                 bulkRunning = false;
-                cancelAnalysis.set(false);
+                bulkCurrent = "";
                 main.post(this::reapply);
             }
-        });
+        }, "lyre-measure-all");
+        t.setDaemon(true);
+        t.start();
     }
 
-    void cancelBulk() { if (bulkRunning) cancelAnalysis.set(true); }
+    private volatile AtomicBoolean bulkStop;
+
+    /** Stops "measure all" right away (the file in progress is abandoned). */
+    void cancelBulk() {
+        AtomicBoolean s = bulkStop;
+        if (s != null) s.set(true);
+        bulkRunning = false;
+    }
 
     void release() {
         cancelAnalysis.set(true);
+        cancelBulk();
         analyzer.shutdownNow();
+        trackWorker[0].shutdownNow();
+        bulkWorker[0].shutdownNow();
         tagIo.shutdownNow();
         if (dp != null) {
             try { dp.release(); } catch (RuntimeException ignored) { }
