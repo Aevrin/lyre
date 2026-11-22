@@ -81,6 +81,9 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
     private LinearLayout tabStrip, header, searchBar, permissionPanel;
     private TextView headerTitle, headerSub, emptyText;
     private EditText searchBox;
+    private LinearLayout searchChips;
+    private int searchFilter;   // 0 all, 1 songs, 2 artists, 3 albums
+    private static final String[] FILTERS = {"All", "Songs", "Artists", "Albums"};
     private ImageButton sortButton;
     private View mini;
     private ImageView miniArt;
@@ -222,6 +225,19 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
         searchBar.addView(Ui.icon(this, R.drawable.ic_close, "Close search", v -> closeSearch(true)));
         searchBar.setVisibility(View.GONE);
         root.addView(searchBar, Ui.matchWrap());
+        searchChips = new LinearLayout(this);
+        searchChips.setPadding(Ui.dp(this, 8), 0, Ui.dp(this, 8), Ui.dp(this, 4));
+        for (int i = 0; i < FILTERS.length; i++) {
+            final int idx = i;
+            TextView c = Ui.text(this, FILTERS[i], 14, R.color.text_muted, true);
+            c.setPadding(Ui.dp(this, 14), Ui.dp(this, 6), Ui.dp(this, 14), Ui.dp(this, 6));
+            LinearLayout.LayoutParams lp = Ui.wrap();
+            lp.rightMargin = Ui.dp(this, 6);
+            c.setOnClickListener(v -> { searchFilter = idx; render(); list.scrollToPosition(0); });
+            searchChips.addView(c, lp);
+        }
+        searchChips.setVisibility(View.GONE);
+        root.addView(searchChips, Ui.matchWrap());
 
         // Tabs
         HorizontalScrollView hs = new HorizontalScrollView(this);
@@ -421,6 +437,7 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
 
     private void openSearch() {
         searchBar.setVisibility(View.VISIBLE);
+        searchChips.setVisibility(View.VISIBLE);
         searchBox.requestFocus();
         InputMethodManager imm = getSystemService(InputMethodManager.class);
         if (imm != null) imm.showSoftInput(searchBox, InputMethodManager.SHOW_IMPLICIT);
@@ -430,6 +447,8 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
     private void closeSearch(boolean rerender) {
         if (searchBar.getVisibility() != View.VISIBLE) return;
         searchBar.setVisibility(View.GONE);
+        searchChips.setVisibility(View.GONE);
+        searchFilter = 0;
         searchBox.setText("");
         InputMethodManager imm = getSystemService(InputMethodManager.class);
         if (imm != null) imm.hideSoftInputFromWindow(searchBox.getWindowToken(), 0);
@@ -465,6 +484,12 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
                 List<Song> s = new ArrayList<>(library.songs());
                 library.sortSongs(s, prefs.songSort());
                 pageSongs = s;
+                if (!s.isEmpty()) {
+                    final List<Song> everything = s;
+                    rows.add(RowAdapter.Row.action(R.drawable.ic_more,
+                            "All " + Library.plural(s.size(), "song") + ": play, add to playlist, blacklist…",
+                            v -> bulkMenu(v, everything)));
+                }
                 addSongs(rows, s, false, null);
                 empty = !library.isLoaded() ? "Loading…" : emptyLibraryText();
                 break;
@@ -578,19 +603,49 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
                 break;
             }
             case SEARCH: {
+                for (int i = 0; i < searchChips.getChildCount(); i++) {
+                    TextView c = (TextView) searchChips.getChildAt(i);
+                    boolean on = i == searchFilter;
+                    c.setTextColor(Ui.color(this, on ? R.color.accent : R.color.text_muted));
+                    c.setBackground(on ? Ui.rounded(this, R.color.surface, 16) : null);
+                }
                 String q = searchBox.getText().toString();
                 if (q.trim().isEmpty()) { empty = "Type to search."; break; }
-                List<Library.Group> ar = Library.searchGroups(library.artists(), q);
-                List<Library.Group> al = Library.searchGroups(library.albums(), q);
-                List<Song> so = library.searchSongs(q);
-                if (!ar.isEmpty()) rows.add(RowAdapter.Row.header("Artists"));
-                for (int i = 0; i < ar.size() && i < 8; i++) rows.add(groupRow(Actions.ARTIST, ar.get(i), ar.get(i).sub, ""));
-                if (!al.isEmpty()) rows.add(RowAdapter.Row.header("Albums"));
-                for (int i = 0; i < al.size() && i < 12; i++) rows.add(groupRow(Actions.ALBUM, al.get(i), al.get(i).sub, ""));
-                if (!so.isEmpty()) rows.add(RowAdapter.Row.header("Songs"));
-                if (so.size() > 300) so = so.subList(0, 300);
-                pageSongs = so;
-                addSongs(rows, so, false, null);
+                boolean all = searchFilter == 0;
+                if (all || searchFilter == 2) {
+                    List<Library.Group> ar = Library.searchGroups(library.artists(), q);
+                    int max = all ? 8 : Integer.MAX_VALUE;
+                    if (!ar.isEmpty() && all) rows.add(RowAdapter.Row.header("Artists"));
+                    for (int i = 0; i < ar.size() && i < max; i++) rows.add(groupRow(Actions.ARTIST, ar.get(i), ar.get(i).sub, ""));
+                    if (all && ar.size() > max) rows.add(moreRow(ar.size() - max, 2));
+                }
+                if (all || searchFilter == 3) {
+                    List<Library.Group> al = Library.searchGroups(library.albums(), q);
+                    int max = all ? 12 : Integer.MAX_VALUE;
+                    if (!al.isEmpty() && all) rows.add(RowAdapter.Row.header("Albums"));
+                    for (int i = 0; i < al.size() && i < max; i++) rows.add(groupRow(Actions.ALBUM, al.get(i), al.get(i).sub, ""));
+                    if (all && al.size() > max) rows.add(moreRow(al.size() - max, 3));
+                }
+                if (all || searchFilter == 1) {
+                    List<Song> so = library.searchSongs(q);
+                    if (!so.isEmpty()) {
+                        if (all) rows.add(RowAdapter.Row.header("Songs"));
+                        final List<Song> found = so;
+                        rows.add(RowAdapter.Row.action(R.drawable.ic_more,
+                                "All " + Library.plural(so.size(), "song") + ": play, add to playlist, blacklist…",
+                                v -> bulkMenu(v, found)));
+                    }
+                    int max = all ? 50 : 5000;
+                    if (all && so.size() > max) {
+                        pageSongs = so;
+                        addSongs(rows, so.subList(0, max), false, null);
+                        rows.add(moreRow(so.size() - max, 1));
+                    } else {
+                        if (so.size() > max) so = so.subList(0, max);
+                        pageSongs = so;
+                        addSongs(rows, so, false, null);
+                    }
+                }
                 empty = "No matches.";
                 break;
             }
@@ -657,6 +712,48 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
             r.song = g.first();
         }
         return r;
+    }
+
+    /** "N more…" row that switches the search to one result type. */
+    private RowAdapter.Row moreRow(int n, int filter) {
+        return RowAdapter.Row.action(R.drawable.ic_search, n + " more " + FILTERS[filter].toLowerCase(java.util.Locale.ROOT) + "…",
+                v -> { searchFilter = filter; render(); list.scrollToPosition(0); });
+    }
+
+    /** Actions on every song in a result list. */
+    private void bulkMenu(View anchor, List<Song> songs) {
+        PopupMenu m = new PopupMenu(this, anchor);
+        String n = Library.plural(songs.size(), "song");
+        m.getMenu().add(0, 1, 0, "Play all");
+        m.getMenu().add(0, 2, 0, "Shuffle all");
+        m.getMenu().add(0, 3, 0, "Play next");
+        m.getMenu().add(0, 4, 0, "Add to queue");
+        m.getMenu().add(0, 5, 0, "Add all to playlist…");
+        m.getMenu().add(0, 6, 0, "Edit tags (" + n + ")");
+        m.getMenu().add(0, 7, 0, "Blacklist all");
+        m.setOnMenuItemClickListener(it -> {
+            switch (it.getItemId()) {
+                case 1: remote.play(songs, 0, false); break;
+                case 2: remote.play(songs, 0, true); break;
+                case 3: remote.playNext(songs); Ui.toast(this, "Playing next"); break;
+                case 4: remote.enqueue(songs); Ui.toast(this, "Added to queue"); break;
+                case 5: Actions.addToPlaylist(this, songs); break;
+                case 6: Actions.editTags(this, songs); break;
+                case 7:
+                    Ui.confirm(this, "Blacklist " + n + "?", "Each song is added to the blacklist. You can remove them "
+                            + "in Settings → Blacklist, or switch the blacklist off to show them again.", "Blacklist", () -> {
+                        List<String[]> entries = new ArrayList<>();
+                        for (Song s : songs) entries.add(new String[]{Db.BL_SONG, s.path, s.title + " — " + s.artist});
+                        db.addBlacklist(entries);
+                        library.refilter();
+                        Ui.toast(this, prefs.blacklistOn() ? "Blacklisted " + n : "Added " + n + " (the blacklist is switched off)");
+                    });
+                    break;
+                default: return false;
+            }
+            return true;
+        });
+        m.show();
     }
 
     private RowAdapter.Row smartRow(Db.SmartRow sr) {

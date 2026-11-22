@@ -297,6 +297,24 @@ public final class Db extends SQLiteOpenHelper {
         getWritableDatabase().insertWithOnConflict("blacklist", null, v, SQLiteDatabase.CONFLICT_IGNORE);
     }
 
+    /** Adds many entries at once; each is {type, value, label}. */
+    public void addBlacklist(List<String[]> entries) {
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        try {
+            for (String[] e : entries) {
+                ContentValues v = new ContentValues();
+                v.put("type", e[0]);
+                v.put("value", e[1]);
+                v.put("label", e[2]);
+                db.insertWithOnConflict("blacklist", null, v, SQLiteDatabase.CONFLICT_IGNORE);
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+    }
+
     public void removeBlacklist(long id) {
         getWritableDatabase().delete("blacklist", "_id=?", new String[]{String.valueOf(id)});
     }

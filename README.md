@@ -17,7 +17,9 @@ A small, private, open-source music player for Android, in the spirit of Shuttle
 - **Library from Android's media scanner.** Lyre doesn't scan storage itself: it reads
   MediaStore, so the library is there instantly and updates when Android finds new files.
   Tabs for Songs, Albums, Artists (by album artist), Genres, Folders and Playlists, with
-  search across songs, albums and artists. Tap the **Lyre** title to reload.
+  search across songs, albums and artists (filter to one type with the chips). Every song in a
+  search, or the whole Songs tab, can be played, queued, added to a playlist, tag-edited or
+  blacklisted at once. Tap the **Lyre** title to reload.
 - **Blacklist you can switch off.** Hide songs, albums, artists, genres or folders (a folder
   includes its subfolders) from their ⋮ menu or Settings. *Settings → Blacklist → Use blacklist*
   turns it off and on without clearing it; entries can be removed one at a time.
