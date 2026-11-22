@@ -10,7 +10,7 @@ A small, private, open-source music player for Android, in the spirit of Shuttle
 - Free software under the [GNU GPL v3 or later](LICENSE).
 - Android 13+.
 
-## Status: 0.1 (first build)
+## Status: 0.2
 
 ### What it does
 
@@ -42,6 +42,12 @@ A small, private, open-source music player for Android, in the spirit of Shuttle
   blank or from a preset; save one as a regular playlist or export it as M3U.
   A play counts after half a track or 4 minutes of listening; a skip is pressing Next within
   the first 30 seconds.
+- **Duplicate finder** (Settings → Library → Find duplicates): *same song* (title and artist
+  ignoring case, punctuation and accents, lengths within 3 seconds, so an MP3 and a FLAC of one
+  track match) or *identical files* (byte-for-byte). Each copy shows its full file location,
+  format, bitrate and size; the suggested keeper (lossless, then highest bitrate) is marked.
+  Remove all extras at once or pick by hand; files go to Android's trash (restorable for 30
+  days) and playlists switch to the copy you kept.
 - **Queue:** play next, add to queue, drag to reorder, swipe to remove, save as a playlist.
 - Shuffle, repeat, sleep timer (minutes or end of track), gapless playback, lock-screen,
   notification, Bluetooth and headset controls (Media3), resume where you left off.
@@ -56,6 +62,11 @@ A small, private, open-source music player for Android, in the spirit of Shuttle
 | Foreground service (media playback), wake lock | Keep playing with the screen off. Granted at install. |
 
 Saving tags uses Android's per-file "Allow Lyre to modify…" dialog instead of "All files access".
+
+## Release notes
+
+Play's "What's new" text comes from `distribution/whatsnew/whatsnew-en-US` (500 characters
+max), updated with each change.
 
 ## Building
 

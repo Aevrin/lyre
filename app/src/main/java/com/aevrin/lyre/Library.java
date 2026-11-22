@@ -158,6 +158,7 @@ public final class Library {
                 MediaStore.Audio.Media.DATE_ADDED,
                 MediaStore.Audio.Media.DATE_MODIFIED,
                 MediaStore.Audio.Media.SIZE,
+                MediaStore.Audio.Media.BITRATE,
         };
         StringBuilder sel = new StringBuilder();
         List<String> args = new ArrayList<>();
@@ -181,7 +182,7 @@ public final class Library {
                         c.getLong(0), c.getString(1), c.getString(2), c.getString(3), c.getString(4),
                         c.getString(5), c.getString(6), c.getLong(7), c.getInt(8),
                         rawTrack % 1000, Math.max(disc, 0), c.getLong(11), c.getString(12),
-                        c.getLong(13), c.getLong(14), c.getLong(15)));
+                        c.getLong(13), c.getLong(14), c.getLong(15), c.getInt(16)));
             }
         }
         return out;
@@ -261,6 +262,9 @@ public final class Library {
 
     /** Visible songs (blacklist applied), sorted by title. */
     public List<Song> songs() { return songs; }
+
+    /** Every song MediaStore returned, including blacklisted ones. */
+    public List<Song> all() { return all; }
 
     /** Any song MediaStore knows, blacklisted or not. */
     public Song byId(long id) { return byId.get(id); }

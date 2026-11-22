@@ -169,6 +169,8 @@ public class SettingsActivity extends Activity implements Library.Listener {
         choice("Hide tracks shorter than", minNames, indexOf(mins, prefs.minSeconds()), null,
                 w -> { prefs.minSeconds(mins[w]); library.reload(); });
         LinearLayout pc = buttons();
+        pc.addView(Ui.button(this, "Find duplicates", v -> startActivity(new Intent(this, DuplicatesActivity.class))));
+        pc.addView(gap());
         pc.addView(Ui.button(this, "Reset play counts", v -> Ui.confirm(this, "Reset play counts?",
                 "Play counts, skips and last-played dates are cleared. Dynamic playlists that use them will change.",
                 "Reset", () -> { db.clearStats(); Ui.toast(this, "Play counts reset"); })));

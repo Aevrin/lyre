@@ -21,10 +21,18 @@ public final class Song {
     public final long dateAdded;  // seconds
     public final long dateModified;
     public final long size;
+    public final int bitrate;     // bits per second, 0 = unknown
 
     public Song(long id, String title, String artist, String album, String albumArtist,
                 String genre, String composer, long albumId, int year, int track, int disc,
                 long duration, String path, long dateAdded, long dateModified, long size) {
+        this(id, title, artist, album, albumArtist, genre, composer, albumId, year, track, disc,
+                duration, path, dateAdded, dateModified, size, 0);
+    }
+
+    public Song(long id, String title, String artist, String album, String albumArtist,
+                String genre, String composer, long albumId, int year, int track, int disc,
+                long duration, String path, long dateAdded, long dateModified, long size, int bitrate) {
         this.id = id;
         this.path = path == null ? "" : path;
         int slash = this.path.lastIndexOf('/');
@@ -44,6 +52,7 @@ public final class Song {
         this.dateAdded = dateAdded;
         this.dateModified = dateModified;
         this.size = size;
+        this.bitrate = bitrate;
     }
 
     public Uri uri() {

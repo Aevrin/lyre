@@ -11,6 +11,9 @@ name: Play internal testing
 #            PLAY_TRACKS (optional, default "internal,alpha"),
 #            VERSION_CODE_OFFSET (optional, bump if versionCode ever collides)
 #
+# Release notes: distribution/whatsnew/whatsnew-en-US (500 characters max),
+# updated with each change.
+#
 # Forks: without these secrets the build step fails at signing, by design.
 
 on:
@@ -94,6 +97,7 @@ jobs:
           packageName: ${{ env.PACKAGE_NAME }}
           releaseFiles: ${{ env.AAB_PATH }}
           tracks: ${{ vars.PLAY_TRACKS || 'internal,alpha' }}
+          whatsNewDirectory: distribution/whatsnew
           status: completed
 
       - name: Remove keystore
