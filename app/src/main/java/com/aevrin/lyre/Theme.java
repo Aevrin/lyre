@@ -48,12 +48,21 @@ final class Theme {
     /** The themed color for a color resource, or null to use the resource as is. */
     static Integer override(Context c, int res) {
         if (res == R.color.accent) return accent(c);
+        // Buttons use the accent too, darkened in dark themes so white text stays readable.
+        if (res == R.color.button) return night(c) ? darken(accent(c), 0.25f) : accent(c);
         if (LyreApp.get().prefs().theme() == Prefs.THEME_BLACK && night(c)) {
             if (res == R.color.bg_primary) return 0xFF000000;
             if (res == R.color.bg_secondary) return 0xFF0B0B0B;
             if (res == R.color.surface) return 0xFF1C1C1C;
         }
         return null;
+    }
+
+    static int darken(int color, float by) {
+        int r = Math.round(((color >> 16) & 0xFF) * (1 - by));
+        int g = Math.round(((color >> 8) & 0xFF) * (1 - by));
+        int b = Math.round((color & 0xFF) * (1 - by));
+        return 0xFF000000 | (r << 16) | (g << 8) | b;
     }
 
     /** Call in every activity's onCreate, before building views. */
