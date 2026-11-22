@@ -294,9 +294,18 @@ public class NowPlayingActivity extends Activity implements Actions.Host {
             c.setRepeatMode(r == Player.REPEAT_MODE_OFF ? Player.REPEAT_MODE_ALL
                     : r == Player.REPEAT_MODE_ALL ? Player.REPEAT_MODE_ONE : Player.REPEAT_MODE_OFF);
         });
+        // The four small buttons share the width left after the play button, so the row
+        // always fits, whatever the screen width or display size.
+        controls.setPadding(Ui.dp(this, 12), Ui.dp(this, 8), Ui.dp(this, 12), Ui.dp(this, 4));
         for (View v : new View[]{shuffle, prev, play, next, repeat}) {
-            LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) v.getLayoutParams();
-            lp.setMargins(Ui.dp(this, 8), 0, Ui.dp(this, 8), 0);
+            LinearLayout.LayoutParams lp;
+            if (v == play) {
+                lp = new LinearLayout.LayoutParams(Ui.dp(this, 72), Ui.dp(this, 72));
+                lp.setMargins(Ui.dp(this, 4), 0, Ui.dp(this, 4), 0);
+            } else {
+                lp = new LinearLayout.LayoutParams(0, Ui.dp(this, 52), 1f);
+                ((ImageButton) v).setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+            }
             controls.addView(v, lp);
         }
         root.addView(controls, Ui.matchWrap());
@@ -332,11 +341,11 @@ public class NowPlayingActivity extends Activity implements Actions.Host {
         }
         play.setImageResource(c.getPlayWhenReady() ? R.drawable.ic_pause : R.drawable.ic_play);
         updateHeart(s);
-        shuffle.setAlpha(c.getShuffleModeEnabled() ? 1f : 0.4f);
+        shuffle.setAlpha(c.getShuffleModeEnabled() ? 1f : 0.6f);
         shuffle.setImageTintList(c.getShuffleModeEnabled() ? ColorStateList.valueOf(Ui.color(this, R.color.accent)) : null);
         int r = c.getRepeatMode();
         repeat.setImageResource(r == Player.REPEAT_MODE_ONE ? R.drawable.ic_repeat_one : R.drawable.ic_repeat);
-        repeat.setAlpha(r == Player.REPEAT_MODE_OFF ? 0.4f : 1f);
+        repeat.setAlpha(r == Player.REPEAT_MODE_OFF ? 0.6f : 1f);
         repeat.setImageTintList(r == Player.REPEAT_MODE_OFF ? null : ColorStateList.valueOf(Ui.color(this, R.color.accent)));
         updatePosition();
         updateStatus();
