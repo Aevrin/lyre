@@ -72,6 +72,16 @@ public final class Prefs {
     public int tab() { return sp.getInt("tab", 0); }
     public void tab(int v) { sp.edit().putInt("tab", v).apply(); }
 
+    /** Hide tracks longer than this many minutes (0 = no limit). */
+    public int maxMinutes() { return sp.getInt("max_minutes", 0); }
+    public void maxMinutes(int v) { sp.edit().putInt("max_minutes", v).apply(); }
+
+    /** Sort directions: false = the natural one (A→Z, newest first), true = reversed. */
+    public boolean songSortReversed() { return sp.getBoolean("song_sort_rev", false); }
+    public void songSortReversed(boolean v) { sp.edit().putBoolean("song_sort_rev", v).apply(); }
+    public boolean albumSortReversed() { return sp.getBoolean("album_sort_rev", false); }
+    public void albumSortReversed(boolean v) { sp.edit().putBoolean("album_sort_rev", v).apply(); }
+
     public int songSort() { return sp.getInt("song_sort", 0); }
     public void songSort(int v) { sp.edit().putInt("song_sort", v).apply(); }
 

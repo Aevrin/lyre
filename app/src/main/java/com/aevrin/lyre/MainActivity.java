@@ -487,6 +487,7 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
             case T_SONGS: {
                 List<Song> s = new ArrayList<>(library.songs());
                 library.sortSongs(s, prefs.songSort());
+                if (prefs.songSortReversed()) java.util.Collections.reverse(s);
                 pageSongs = s;
                 if (!s.isEmpty()) {
                     final List<Song> everything = s;
@@ -974,15 +975,31 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
         m.show();
     }
 
+    // Natural direction label, reversed label.
+    private static final String[][] SONG_SORTS = {{"Title", "A→Z", "Z→A"}, {"Artist", "A→Z", "Z→A"},
+            {"Album", "A→Z", "Z→A"}, {"Date added", "newest first", "oldest first"}, {"Year", "newest first", "oldest first"}};
+    private static final String[][] ALBUM_SORTS = {{"Title", "A→Z", "Z→A"}, {"Artist", "A→Z", "Z→A"},
+            {"Year", "newest first", "oldest first"}};
+
+    /** Pick a sort; picking the current one again flips its direction. */
     private void sortMenu() {
         Page p = top();
-        if (p.type == T_SONGS) {
-            Ui.choose(this, "Sort songs", new String[]{"Title", "Artist", "Album", "Date added", "Year"},
-                    prefs.songSort(), w -> { prefs.songSort(w); render(); });
-        } else if (p.type == T_ALBUMS) {
-            Ui.choose(this, "Sort albums", new String[]{"Title", "Artist", "Year"},
-                    prefs.albumSort(), w -> { prefs.albumSort(w); library.refilter(); });
+        boolean songs = p.type == T_SONGS;
+        if (!songs && p.type != T_ALBUMS) return;
+        String[][] sorts = songs ? SONG_SORTS : ALBUM_SORTS;
+        int cur = songs ? prefs.songSort() : prefs.albumSort();
+        boolean rev = songs ? prefs.songSortReversed() : prefs.albumSortReversed();
+        String[] items = new String[sorts.length];
+        for (int i = 0; i < sorts.length; i++) {
+            items[i] = i == cur ? sorts[i][0] + " (" + sorts[i][rev ? 2 : 1] + ")  ⇅ tap again to reverse"
+                    : sorts[i][0] + " (" + sorts[i][1] + ")";
         }
+        Ui.choose(this, songs ? "Sort songs" : "Sort albums", items, cur, w -> {
+            boolean r = w == cur && !rev;
+            if (songs) { prefs.songSort(w); prefs.songSortReversed(r); render(); }
+            else { prefs.albumSort(w); prefs.albumSortReversed(r); library.refilter(); }
+            Ui.toast(this, sorts[w][0] + ", " + sorts[w][r ? 2 : 1]);
+        });
     }
 
     // ---------------------------------------------------------------- playlists

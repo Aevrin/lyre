@@ -178,6 +178,11 @@ public class SettingsActivity extends Activity implements Library.Listener {
         String[] minNames = {"Show all", "10 seconds", "30 seconds", "1 minute"};
         choice("Hide tracks shorter than", minNames, indexOf(mins, prefs.minSeconds()), null,
                 w -> { prefs.minSeconds(mins[w]); library.reload(); });
+        int[] maxes = {0, 10, 15, 20, 30, 60};
+        String[] maxNames = {"No limit", "10 minutes", "15 minutes", "20 minutes", "30 minutes", "1 hour"};
+        choice("Hide tracks longer than", maxNames, indexOf(maxes, prefs.maxMinutes()),
+                "For keeping long mixes, audiobooks or recordings out of the library.",
+                w -> { prefs.maxMinutes(maxes[w]); library.reload(); });
         LinearLayout pc = buttons();
         pc.addView(Ui.button(this, "Find duplicates", v -> startActivity(new Intent(this, DuplicatesActivity.class))));
         content.addView(pc);

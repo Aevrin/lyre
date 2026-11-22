@@ -1,8 +1,4 @@
-0.3 (follow-up)
-• Buttons now follow the accent color.
-• Themes: dark, black (OLED), light or system, plus accent colors.
-• 10-band equalizer with presets (Now Playing or Settings).
-• Favorites: heart on Now Playing, Favorites list, and a dynamic-playlist rule.
-• Home-screen widgets in two sizes.
-• Backup and restore everything to one file.
-• Blacklist moved to its own screen with search and filters.
+• Sorting goes both ways: pick the current sort again to reverse it (Z→A, oldest first).
+• New setting: hide tracks longer than 10, 15, 20 or 30 minutes or 1 hour (Settings → Library).
+• Buttons follow the accent color.
+• 0.3: themes and accents, equalizer, favorites, widgets, backup and restore, blacklist screen.

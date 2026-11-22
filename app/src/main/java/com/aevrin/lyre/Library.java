@@ -169,6 +169,12 @@ public final class Library {
             sel.append(MediaStore.Audio.Media.DURATION).append(" >= ?");
             args.add(String.valueOf(min * 1000L));
         }
+        int max = prefs.maxMinutes();
+        if (max > 0) {
+            if (sel.length() > 0) sel.append(" AND ");
+            sel.append(MediaStore.Audio.Media.DURATION).append(" <= ?");
+            args.add(String.valueOf(max * 60_000L));
+        }
         List<Song> out = new ArrayList<>();
         try (Cursor c = cr.query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, cols,
                 sel.length() == 0 ? null : sel.toString(),
@@ -315,6 +321,7 @@ public final class Library {
                 }
                 return collator.compare(a.name, b.name);
             });
+            if (prefs.albumSortReversed()) Collections.reverse(g);
             albums = g;
         }
         return g;
