@@ -59,7 +59,11 @@ A small, private, open-source music player for Android, in the spirit of Shuttle
   also opens each one to catch damaged files. Remove them to the trash or blacklist them.
   Plays MP3, AAC/M4A, Ogg Vorbis, Opus, FLAC and WAV.
 - **Queue:** play next, add to queue, drag to reorder, swipe to remove, save as a playlist.
-- Shuffle, repeat, sleep timer (minutes or end of track), gapless playback, lock-screen,
+- **Browsing from cars and Bluetooth head units** (and Android Auto): artists, albums, genres,
+  playlists (with favorites and dynamic playlists), folders and songs. Picking a song plays its
+  album or playlist from that song. Whether the stereo can browse depends on its Bluetooth (AVRCP)
+  version; very old units only have play/pause/skip.
+- Shuffle, repeat (also on the notification and lock screen), sleep timer (minutes or end of track), gapless playback, lock-screen,
   notification, Bluetooth and headset controls (Media3), resume where you left off.
   External equalizer apps can attach to Lyre's audio.
 - **Themes:** dark (default), black for OLED screens, light, or follow the system, with a choice of

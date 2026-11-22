@@ -27,7 +27,14 @@ import androidx.media3.common.util.BitmapLoader;
 import androidx.media3.datasource.DataSourceBitmapLoader;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.session.MediaSession;
-import androidx.media3.session.MediaSessionService;
+import androidx.media3.session.CommandButton;
+import androidx.media3.session.LibraryResult;
+import androidx.media3.session.MediaLibraryService;
+import androidx.media3.session.SessionCommand;
+import androidx.media3.session.SessionCommands;
+import androidx.media3.session.SessionResult;
+
+import com.google.common.collect.ImmutableList;
 
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -44,12 +51,12 @@ import java.util.concurrent.Executors;
  * a few extras (sleep timer, normalization status) are plain methods on the
  * running instance, since everything is in one process.
  */
-public class PlaybackService extends MediaSessionService {
+public class PlaybackService extends MediaLibraryService {
 
     private static volatile PlaybackService instance;
 
     private ExoPlayer player;
-    private MediaSession session;
+    private MediaLibrarySession session;
     private Normalizer normalizer;
     private Prefs prefs;
     private Library library;
@@ -156,10 +163,10 @@ public class PlaybackService extends MediaSessionService {
             }
 
             @Override
-            public void onShuffleModeEnabledChanged(boolean on) { saveModes(); }
+            public void onShuffleModeEnabledChanged(boolean on) { saveModes(); refreshModeButtons(); }
 
             @Override
-            public void onRepeatModeChanged(int mode) { saveModes(); }
+            public void onRepeatModeChanged(int mode) { saveModes(); refreshModeButtons(); }
 
             @Override
             public void onTimelineChanged(@NonNull androidx.media3.common.Timeline t, int reason) {
@@ -172,11 +179,11 @@ public class PlaybackService extends MediaSessionService {
         PendingIntent pi = PendingIntent.getActivity(this, 0, open,
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
 
-        session = new MediaSession.Builder(this, player)
+        session = new MediaLibrarySession.Builder(this, player, new Callback())
                 .setSessionActivity(pi)
                 .setBitmapLoader(new ArtLoader())
-                .setCallback(new Callback())
                 .build();
+        session.setMediaButtonPreferences(modeButtons());
 
         restoreQueue();
         instance = this;
@@ -184,7 +191,7 @@ public class PlaybackService extends MediaSessionService {
 
     @Nullable
     @Override
-    public MediaSession onGetSession(@NonNull MediaSession.ControllerInfo controllerInfo) {
+    public MediaLibrarySession onGetSession(@NonNull MediaSession.ControllerInfo controllerInfo) {
         return session;
     }
 
@@ -248,11 +255,17 @@ public class PlaybackService extends MediaSessionService {
     private List<MediaItem> resolve(List<MediaItem> in) {
         List<MediaItem> out = new ArrayList<>(in.size());
         for (MediaItem m : in) {
-            if (m.localConfiguration != null) { out.add(m); continue; }
-            try {
-                Song s = library.byId(Long.parseLong(m.mediaId));
-                if (s != null) out.add(item(s));
-            } catch (NumberFormatException ignored) { }
+            long id = Browse.songId(m.mediaId);
+            if (id < 0) {
+                try { id = Long.parseLong(m.mediaId); } catch (NumberFormatException ignored) { }
+            }
+            Song s = id >= 0 ? library.byId(id) : null;
+            if (s != null) out.add(item(s));
+            else if (id < 0 && m.localConfiguration != null && !m.mediaId.contains(":")) out.add(m);
+            else if (id < 0) {
+                // A whole album/playlist added from a browser.
+                for (Song x : Browse.songsFor(m.mediaId)) out.add(item(x));
+            }
         }
         return out;
     }
@@ -326,7 +339,116 @@ public class PlaybackService extends MediaSessionService {
         saveQueue();
     }
 
-    private final class Callback implements MediaSession.Callback {
+    // Shuffle and repeat buttons for the notification, lock screen and car displays.
+    private static final SessionCommand CMD_SHUFFLE = new SessionCommand("lyre.SHUFFLE", android.os.Bundle.EMPTY);
+    private static final SessionCommand CMD_REPEAT = new SessionCommand("lyre.REPEAT", android.os.Bundle.EMPTY);
+
+    private List<CommandButton> modeButtons() {
+        boolean sh = player != null && player.getShuffleModeEnabled();
+        int rep = player == null ? Player.REPEAT_MODE_OFF : player.getRepeatMode();
+        CommandButton shuffle = new CommandButton.Builder(sh ? CommandButton.ICON_SHUFFLE_ON : CommandButton.ICON_SHUFFLE_OFF)
+                .setDisplayName(sh ? "Shuffle on" : "Shuffle off")
+                .setSessionCommand(CMD_SHUFFLE)
+                .build();
+        CommandButton repeat = new CommandButton.Builder(rep == Player.REPEAT_MODE_ONE ? CommandButton.ICON_REPEAT_ONE
+                : rep == Player.REPEAT_MODE_ALL ? CommandButton.ICON_REPEAT_ALL : CommandButton.ICON_REPEAT_OFF)
+                .setDisplayName(rep == Player.REPEAT_MODE_ONE ? "Repeat one" : rep == Player.REPEAT_MODE_ALL ? "Repeat all" : "Repeat off")
+                .setSessionCommand(CMD_REPEAT)
+                .build();
+        return ImmutableList.of(shuffle, repeat);
+    }
+
+    private void refreshModeButtons() {
+        if (session != null) session.setMediaButtonPreferences(modeButtons());
+    }
+
+    private final class Callback implements MediaLibrarySession.Callback {
+        @NonNull
+        @Override
+        public MediaSession.ConnectionResult onConnect(@NonNull MediaSession s, @NonNull MediaSession.ControllerInfo c) {
+            SessionCommands cmds = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()
+                    .add(CMD_SHUFFLE).add(CMD_REPEAT).build();
+            return new MediaSession.ConnectionResult.AcceptedResultBuilder(s)
+                    .setAvailableSessionCommands(cmds)
+                    .setMediaButtonPreferences(modeButtons())
+                    .build();
+        }
+
+        @NonNull
+        @Override
+        public ListenableFuture<SessionResult> onCustomCommand(@NonNull MediaSession s, @NonNull MediaSession.ControllerInfo c,
+                @NonNull SessionCommand cmd, @NonNull android.os.Bundle args) {
+            if (CMD_SHUFFLE.customAction.equals(cmd.customAction)) {
+                player.setShuffleModeEnabled(!player.getShuffleModeEnabled());
+            } else if (CMD_REPEAT.customAction.equals(cmd.customAction)) {
+                int r = player.getRepeatMode();
+                player.setRepeatMode(r == Player.REPEAT_MODE_OFF ? Player.REPEAT_MODE_ALL
+                        : r == Player.REPEAT_MODE_ALL ? Player.REPEAT_MODE_ONE : Player.REPEAT_MODE_OFF);
+            }
+            return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_SUCCESS));
+        }
+
+        // ---- browsing (cars, Bluetooth head units, Android Auto)
+
+        @NonNull
+        @Override
+        public ListenableFuture<LibraryResult<MediaItem>> onGetLibraryRoot(@NonNull MediaLibrarySession s,
+                @NonNull MediaSession.ControllerInfo c, @Nullable LibraryParams params) {
+            return Futures.immediateFuture(LibraryResult.ofItem(Browse.root(), params));
+        }
+
+        @NonNull
+        @Override
+        public ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> onGetChildren(@NonNull MediaLibrarySession s,
+                @NonNull MediaSession.ControllerInfo c, @NonNull String parentId, int page, int pageSize,
+                @Nullable LibraryParams params) {
+            List<MediaItem> all = Browse.children(parentId);
+            int from = (int) Math.min((long) page * pageSize, all.size());
+            int to = (int) Math.min((long) from + pageSize, all.size());
+            return Futures.immediateFuture(LibraryResult.ofItemList(all.subList(from, to), params));
+        }
+
+        @NonNull
+        @Override
+        public ListenableFuture<LibraryResult<MediaItem>> onGetItem(@NonNull MediaLibrarySession s,
+                @NonNull MediaSession.ControllerInfo c, @NonNull String mediaId) {
+            MediaItem item = Browse.item(mediaId);
+            return Futures.immediateFuture(item == null
+                    ? LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)
+                    : LibraryResult.ofItem(item, null));
+        }
+
+        /**
+         * A single item picked in a browser becomes its whole list: a song plays its
+         * album/playlist from that song; an album or playlist plays from the top.
+         */
+        @NonNull
+        @Override
+        public ListenableFuture<MediaSession.MediaItemsWithStartPosition> onSetMediaItems(@NonNull MediaSession s,
+                @NonNull MediaSession.ControllerInfo c, @NonNull List<MediaItem> items, int startIndex, long startPositionMs) {
+            if (items.size() == 1) {
+                String id = items.get(0).mediaId;
+                String ctx = Browse.songId(id) >= 0 ? Browse.context(id) : (id.contains(":") || id.equals("fav") || id.equals("songs") ? id : null);
+                if (ctx != null) {
+                    List<Song> songs = Browse.songsFor(ctx);
+                    long want = Browse.songId(id);
+                    int idx = 0;
+                    List<MediaItem> out = new ArrayList<>(songs.size());
+                    for (int i = 0; i < songs.size(); i++) {
+                        if (songs.get(i).id == want) idx = i;
+                        out.add(item(songs.get(i)));
+                    }
+                    if (!out.isEmpty()) {
+                        return Futures.immediateFuture(new MediaSession.MediaItemsWithStartPosition(
+                                out, idx, want >= 0 ? startPositionMs : C.TIME_UNSET));
+                    }
+                }
+            }
+            List<MediaItem> resolved = resolve(items);
+            return Futures.immediateFuture(new MediaSession.MediaItemsWithStartPosition(
+                    resolved, Math.max(0, Math.min(startIndex, resolved.size() - 1)), startPositionMs));
+        }
+
         @NonNull
         @Override
         public ListenableFuture<List<MediaItem>> onAddMediaItems(@NonNull MediaSession s,
