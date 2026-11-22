@@ -1,4 +1,4 @@
-• Fixed: "Measure whole library" got stuck at 0 and couldn't be stopped. Measuring is now many times faster, shows the current song, skips files that stall, and stops immediately.
+• Fixed: "Measure whole library" got stuck at 0 and couldn't be stopped. It's now much faster, counts only songs not yet measured, shows the current song, skips files that stall, and stops immediately.
 • Files that won't play are skipped automatically.
 • Find unplayable files (Settings → Library), with removal to Android's trash.
 • Tag editor suggests artists as you type.

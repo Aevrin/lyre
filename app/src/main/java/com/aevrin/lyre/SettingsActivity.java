@@ -214,9 +214,11 @@ public class SettingsActivity extends Activity implements Library.Listener {
     private void updateMeasureStatus() {
         if (measureStatus == null) return;
         PlaybackService svc = PlaybackService.get();
-        String s = db.measuredCount() + " of " + library.songs().size() + " tracks measured.";
+        String s = db.measuredCount() + " of " + library.songs().size() + " tracks measured. "
+                + "Measured tracks are skipped; a track is measured again only if its file changes.";
         if (svc != null && svc.measuring()) {
-            s = "Measuring… " + svc.measureDone() + " / " + svc.measureTotal();
+            s = svc.measureTotal() == 0 && svc.measureDone() == 0 ? "Measuring…"
+                    : "Measuring " + svc.measureDone() + " / " + svc.measureTotal() + " still to do";
             String cur = svc.measureCurrent();
             if (!cur.isEmpty()) s += "\nNow: " + cur;
             if (svc.measureFailed() > 0) s += "\n" + svc.measureFailed() + " couldn't be measured (skipped)";

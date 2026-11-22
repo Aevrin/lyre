@@ -293,34 +293,38 @@ final class Normalizer {
     /** Measures every unmeasured song in the library, one at a time in the background. */
     void measureAll(java.util.List<Song> songs) {
         if (bulkRunning) return;
-        ArrayDeque<Song> todo = new ArrayDeque<>();
-        for (Song s : songs) todo.add(s);
         bulkRunning = true;
         bulkDone = 0;
         bulkFailed = 0;
-        bulkCurrent = "";
-        bulkTotal = todo.size();
+        bulkTotal = 0;
+        bulkCurrent = "Finding songs that still need measuring…";
         final AtomicBoolean stop = new AtomicBoolean();
         bulkStop = stop;
         // Runs on its own thread, not behind the per-track queue, so it starts right away.
         Thread t = new Thread(() -> {
             Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
             try {
+                // Only songs without a current measurement count toward the total.
+                ArrayDeque<Song> todo = new ArrayDeque<>();
+                for (Song s : songs) {
+                    if (stop.get()) return;
+                    Db.Gain g = db.gain(s);
+                    if ((g == null || Float.isNaN(g.lufs)) && !failed.contains(s.path)) todo.add(s);
+                }
+                bulkTotal = todo.size();
+                bulkCurrent = "";
                 while (!todo.isEmpty() && !stop.get()) {
                     Song s = todo.poll();
-                    Db.Gain g = db.gain(s);
-                    if (g == null || Float.isNaN(g.lufs)) {
-                        bulkCurrent = s.title + " — " + s.artist;
-                        float[] r = measureGuarded(s, stop, bulkWorker);
-                        if (r != null) {
-                            g = db.gain(s);
-                            if (g == null) g = new Db.Gain();
-                            g.lufs = r[0];
-                            g.peak = r[1];
-                            db.putGain(s, g);
-                        } else if (!stop.get()) {
-                            bulkFailed++;
-                        }
+                    bulkCurrent = s.title + " — " + s.artist;
+                    float[] r = measureGuarded(s, stop, bulkWorker);
+                    if (r != null) {
+                        Db.Gain g = db.gain(s);
+                        if (g == null) g = new Db.Gain();
+                        g.lufs = r[0];
+                        g.peak = r[1];
+                        db.putGain(s, g);
+                    } else if (!stop.get()) {
+                        bulkFailed++;
                     }
                     if (!stop.get()) bulkDone++;
                 }
