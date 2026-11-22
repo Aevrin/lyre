@@ -63,6 +63,10 @@ public class PlaybackService extends MediaSessionService {
         sleepAt = 0;
         if (player != null) player.pause();
     };
+    // Skipping files that won't play; stops after a run of failures so a broken queue can't spin.
+    private int consecutiveErrors;
+    private boolean skippingFailed;
+
     // Play counting: a track counts as played after half its length or 4 minutes of listening.
     private String trackPath;
     private long trackDuration, listened, playingSince;
@@ -108,12 +112,22 @@ public class PlaybackService extends MediaSessionService {
         player.addListener(new Player.Listener() {
             @Override
             public void onMediaItemTransition(@Nullable MediaItem item, int reason) {
-                finishTrack(reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK);
+                finishTrack(reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK && !skippingFailed);
+                skippingFailed = false;
                 onTrackChanged();
             }
 
             @Override
+            public void onPlayerError(@NonNull androidx.media3.common.PlaybackException error) {
+                onPlaybackFailed(error);
+            }
+
+            @Override
             public void onIsPlayingChanged(boolean playing) {
+                if (playing) {
+                    consecutiveErrors = 0;
+                    if (trackPath != null) ((LyreApp) getApplication()).db().clearFailure(trackPath);
+                }
                 long now = SystemClock.elapsedRealtime();
                 if (playing && playingSince == 0) {
                     playingSince = now;
@@ -245,6 +259,26 @@ public class PlaybackService extends MediaSessionService {
         MediaItem m = player.getCurrentMediaItem();
         if (m == null) return null;
         try { return library.byId(Long.parseLong(m.mediaId)); } catch (NumberFormatException e) { return null; }
+    }
+
+    /** Records the failure, tells the user, and moves on to the next track. */
+    private void onPlaybackFailed(androidx.media3.common.PlaybackException error) {
+        Song s = currentSong();
+        String why = error.getErrorCodeName();
+        if (s != null) ((LyreApp) getApplication()).db().addFailure(s.path, why);
+        consecutiveErrors++;
+        String name = s != null ? s.title : "This track";
+        boolean canSkip = player.hasNextMediaItem() && consecutiveErrors < Math.min(10, player.getMediaItemCount());
+        android.widget.Toast.makeText(this, canSkip ? "Can't play " + name + ", skipping"
+                : "Can't play " + name, android.widget.Toast.LENGTH_SHORT).show();
+        if (canSkip) {
+            skippingFailed = true;   // not a user skip; don't count it
+            player.seekToNextMediaItem();
+            player.prepare();
+            player.play();
+        } else {
+            consecutiveErrors = 0;
+        }
     }
 
     private long listenedMs() {

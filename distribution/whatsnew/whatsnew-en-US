@@ -1,3 +1,4 @@
-• Tag editor suggests artists from your library as you type (after 2 letters), for Artist and Album artist.
-• Find duplicates (Settings → Library): same song or exact copies, with file locations; keep the best copy and send the rest to Android's trash.
-• Dynamic playlists from rules: play count, last played, date added, length and more.
+• Files that won't play are skipped automatically, with a short message.
+• Find unplayable files (Settings → Library): unsupported formats like WMA, files that failed to play, and (full check) damaged files. Remove them to Android's trash or hide them.
+• Tag editor suggests artists from your library as you type.
+• Find duplicates and dynamic playlists.

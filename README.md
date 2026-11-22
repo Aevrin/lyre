@@ -49,6 +49,11 @@ A small, private, open-source music player for Android, in the spirit of Shuttle
   format, bitrate and size; the suggested keeper (lossless, then highest bitrate) is marked.
   Remove all extras at once or pick by hand; files go to Android's trash (restorable for 30
   days) and playlists switch to the copy you kept.
+- **Unplayable files** are skipped automatically, with a short message (it stops after a run of
+  failures). *Settings → Library → Find unplayable files* lists formats Android can't decode
+  (WMA, APE, WavPack, DSD, ...), empty files and files that failed to play; *Check every file*
+  also opens each one to catch damaged files. Remove them to the trash or blacklist them.
+  Plays MP3, AAC/M4A, Ogg Vorbis, Opus, FLAC and WAV.
 - **Queue:** play next, add to queue, drag to reorder, swipe to remove, save as a playlist.
 - Shuffle, repeat, sleep timer (minutes or end of track), gapless playback, lock-screen,
   notification, Bluetooth and headset controls (Media3), resume where you left off.

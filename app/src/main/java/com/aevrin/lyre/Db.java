@@ -46,7 +46,7 @@ public final class Db extends SQLiteOpenHelper {
     }
 
     public Db(Context c) {
-        super(c, "lyre.db", null, 2);
+        super(c, "lyre.db", null, 3);
     }
 
     @Override
@@ -57,11 +57,39 @@ public final class Db extends SQLiteOpenHelper {
         db.execSQL("CREATE TABLE blacklist (_id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, value TEXT NOT NULL, label TEXT, UNIQUE(type, value))");
         db.execSQL("CREATE TABLE gains (path TEXT PRIMARY KEY, size INTEGER, mtime INTEGER, lufs REAL, peak REAL, rg_track REAL, rg_album REAL, rg_checked INTEGER DEFAULT 0)");
         createV2(db);
+        createV3(db);
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldV, int newV) {
         if (oldV < 2) createV2(db);
+        if (oldV < 3) createV3(db);
+    }
+
+    /** Version 3: files that failed to play. */
+    private static void createV3(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS failures (path TEXT PRIMARY KEY, error TEXT, at INTEGER)");
+    }
+
+    public void addFailure(String path, String error) {
+        ContentValues v = new ContentValues();
+        v.put("path", path);
+        v.put("error", error);
+        v.put("at", System.currentTimeMillis());
+        getWritableDatabase().insertWithOnConflict("failures", null, v, SQLiteDatabase.CONFLICT_REPLACE);
+    }
+
+    public void clearFailure(String path) {
+        getWritableDatabase().delete("failures", "path=?", new String[]{path});
+    }
+
+    /** path → error message for every file that failed to play and hasn't played since. */
+    public java.util.Map<String, String> failures() {
+        java.util.Map<String, String> m = new java.util.HashMap<>();
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT path, error FROM failures", null)) {
+            while (c.moveToNext()) m.put(c.getString(0), c.getString(1));
+        }
+        return m;
     }
 
     /** Version 2: play statistics and dynamic playlists. */
