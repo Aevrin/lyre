@@ -263,6 +263,19 @@ public final class Library {
     /** Visible songs (blacklist applied), sorted by title. */
     public List<Song> songs() { return songs; }
 
+    /** Distinct artist and album-artist names in the whole library, for tag suggestions. */
+    public List<String> artistNames() {
+        java.util.TreeMap<String, String> m = new java.util.TreeMap<>();
+        for (Song s : all) {
+            for (String n : new String[]{s.artist, s.albumArtist}) {
+                if (!Song.blank(n) && !"Unknown".equals(n)) m.putIfAbsent(n.toLowerCase(Locale.ROOT), n);
+            }
+        }
+        List<String> out = new ArrayList<>(m.values());
+        out.sort(collator::compare);
+        return out;
+    }
+
     /** Every song MediaStore returned, including blacklisted ones. */
     public List<Song> all() { return all; }
 

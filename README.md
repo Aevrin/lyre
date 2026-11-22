@@ -30,7 +30,8 @@ A small, private, open-source music player for Android, in the spirit of Shuttle
   - Gain is applied with Android's DynamicsProcessing effect plus a limiter, so boosting
     quiet tracks can't clip. Now Playing shows the gain applied to the current track.
 - **Tag editor.** Title, artist, album, album artist, genre, year, track, disc, composer,
-  comment and cover art, for one song or many at once (an album, artist, ...). Android asks
+  comment and cover art, for one song or many at once (an album, artist, ...). Artist and
+  album artist suggest names already in your library after two letters. Android asks
   once per save for permission to modify the files; the media scanner then re-reads them.
   Uses jaudiotagger: MP3, FLAC, Ogg Vorbis, M4A/MP4, WMA, WAV, AIFF, DSF.
 - **Playlists** with drag-to-reorder, **M3U export** (one playlist, or all of them into a

@@ -20,6 +20,8 @@ import android.provider.MediaStore;
 import android.text.InputType;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ArrayAdapter;
+import android.widget.AutoCompleteTextView;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -206,13 +208,30 @@ public class TagEditorActivity extends Activity {
         return m;
     }
 
+    private List<String> artists;
+
+    private List<String> artistNames() {
+        if (artists == null) artists = LyreApp.get().library().artistNames();
+        return artists;
+    }
+
     private void buildFields() {
         for (int i = 0; i < Tags.KEYS.length; i++) {
             FieldKey k = Tags.KEYS[i];
             TextView label = Ui.text(this, Tags.LABELS[i], 13, R.color.accent, true);
             label.setPadding(0, Ui.dp(this, 14), 0, 0);
             form.addView(label);
-            EditText e = new EditText(this);
+            boolean artistField = k == FieldKey.ARTIST || k == FieldKey.ALBUM_ARTIST;
+            EditText e;
+            if (artistField) {
+                // Suggest artists already in the library once two characters are typed.
+                AutoCompleteTextView ac = new AutoCompleteTextView(this);
+                ac.setThreshold(2);
+                ac.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_dropdown_item_1line, artistNames()));
+                e = ac;
+            } else {
+                e = new EditText(this);
+            }
             e.setText(initial.get(k));
             e.setTextColor(Ui.color(this, R.color.text_primary));
             boolean numeric = k == FieldKey.YEAR || k == FieldKey.TRACK || k == FieldKey.DISC_NO;
