@@ -48,6 +48,8 @@ import java.util.concurrent.Executors;
  */
 public class TagEditorActivity extends Activity {
 
+    private int themeVersion;
+
     static final String EXTRA_IDS = "ids";
     private static final int REQ_WRITE = 1, REQ_ART = 2;
 
@@ -69,6 +71,8 @@ public class TagEditorActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        Theme.apply(this);
+        themeVersion = Theme.version;
         long[] ids = getIntent().getLongArrayExtra(EXTRA_IDS);
         Library lib = LyreApp.get().library();
         if (ids != null) for (long id : ids) {
@@ -376,4 +380,11 @@ public class TagEditorActivity extends Activity {
         return (a == null ? "" : a).equals(b == null ? "" : b);
     }
 
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Theme or accent changed in Settings while this screen was open.
+        if (themeVersion != Theme.version) recreate();
+    }
 }

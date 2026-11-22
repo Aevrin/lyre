@@ -1,4 +1,7 @@
-• Search filters: All, Songs, Artists, Albums.
-• Act on every song in a search (or the Songs tab) at once: play, shuffle, queue, add to a playlist, edit tags or blacklist.
-• Fixed: "Measure whole library" got stuck at 0 and couldn't be stopped. It's now much faster, counts only songs still to measure, and stops immediately.
-• Files that won't play are skipped.
+0.3
+• Themes: dark, black (OLED), light or system, plus accent colors.
+• 10-band equalizer with presets (Now Playing or Settings).
+• Favorites: heart on Now Playing, Favorites list, and a dynamic-playlist rule.
+• Home-screen widgets in two sizes.
+• Backup and restore everything to one file.
+• Blacklist moved to its own screen with search and filters.

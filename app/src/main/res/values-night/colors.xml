@@ -11,4 +11,8 @@
     <color name="text_muted">#99E6F0FF</color>
     <color name="button">#375A82</color>
     <color name="error">#DC2626</color>
+    <color name="widget_bg">#192534</color>
+    <color name="widget_text">#E6F0FF</color>
+    <color name="widget_text_muted">#99E6F0FF</color>
+    <color name="widget_icon">#E6F0FF</color>
 </resources>

@@ -39,13 +39,15 @@ import java.util.Locale;
 /** Full-screen player with the queue, sleep timer and normalization status. */
 public class NowPlayingActivity extends Activity implements Actions.Host {
 
+    private int themeVersion;
+
     private Remote remote;
     private final Handler main = new Handler(Looper.getMainLooper());
 
     private ImageView art;
     private TextView title, artist, album, pos, dur, status;
     private SeekBar seek;
-    private ImageButton play, shuffle, repeat, queueBtn;
+    private ImageButton play, shuffle, repeat, queueBtn, heart;
     private FrameLayout stage;
     private RecyclerView queueList;
     private RowAdapter queueAdapter;
@@ -67,6 +69,8 @@ public class NowPlayingActivity extends Activity implements Actions.Host {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        Theme.apply(this);
+        themeVersion = Theme.version;
         setContentView(build());
         remote = new Remote(this, new Player.Listener() {
             @Override public void onEvents(@NonNull Player p, @NonNull Player.Events e) {
@@ -94,7 +98,7 @@ public class NowPlayingActivity extends Activity implements Actions.Host {
 
     @Override public Activity activity() { return this; }
     @Override public Remote remote() { return remote; }
-    @Override public void refresh() { }
+    @Override public void refresh() { update(); }
     @Override
     public void openGroup(int kind, String key) {
         startActivity(new android.content.Intent(this, MainActivity.class)
@@ -116,6 +120,8 @@ public class NowPlayingActivity extends Activity implements Actions.Host {
         top.addView(Ui.icon(this, R.drawable.ic_back, "Back", v -> finish()));
         TextView label = Ui.text(this, "Now playing", 16, R.color.text_secondary, true);
         top.addView(label, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        top.addView(Ui.icon(this, R.drawable.ic_eq, "Equalizer",
+                v -> startActivity(new android.content.Intent(this, EqualizerActivity.class))));
         top.addView(Ui.icon(this, R.drawable.ic_timer, "Sleep timer", v -> sleepMenu()));
         queueBtn = Ui.icon(this, R.drawable.ic_queue, "Queue", v -> toggleQueue());
         top.addView(queueBtn);
@@ -218,7 +224,14 @@ public class NowPlayingActivity extends Activity implements Actions.Host {
         info.addView(title);
         info.addView(artist);
         info.addView(album);
-        root.addView(info, Ui.matchWrap());
+        LinearLayout infoRow = new LinearLayout(this);
+        Ui.center(infoRow);
+        infoRow.addView(info, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        heart = Ui.icon(this, R.drawable.ic_heart_outline, "Favorite", v -> toggleFavorite());
+        LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(Ui.dp(this, 48), Ui.dp(this, 48));
+        hp.rightMargin = Ui.dp(this, 12);
+        infoRow.addView(heart, hp);
+        root.addView(infoRow, Ui.matchWrap());
 
         // Seek bar
         seek = new SeekBar(this);
@@ -318,6 +331,7 @@ public class NowPlayingActivity extends Activity implements Actions.Host {
             Art.into(art, s, 1024, R.drawable.ic_album);
         }
         play.setImageResource(c.getPlayWhenReady() ? R.drawable.ic_pause : R.drawable.ic_play);
+        updateHeart(s);
         shuffle.setAlpha(c.getShuffleModeEnabled() ? 1f : 0.4f);
         shuffle.setImageTintList(c.getShuffleModeEnabled() ? ColorStateList.valueOf(Ui.color(this, R.color.accent)) : null);
         int r = c.getRepeatMode();
@@ -353,6 +367,25 @@ public class NowPlayingActivity extends Activity implements Actions.Host {
         }
         status.setText(sb.toString());
         status.setSingleLine(false);
+    }
+
+    private void updateHeart(Song s) {
+        boolean fav = s != null && LyreApp.get().db().isFavorite(s.path);
+        heart.setVisibility(s == null ? View.INVISIBLE : View.VISIBLE);
+        heart.setImageResource(fav ? R.drawable.ic_heart : R.drawable.ic_heart_outline);
+        heart.setImageTintList(fav ? ColorStateList.valueOf(Ui.color(this, R.color.accent)) : null);
+        heart.setContentDescription(fav ? "Remove from favorites" : "Add to favorites");
+    }
+
+    private void toggleFavorite() {
+        MediaController c = remote.get();
+        Song s = c == null ? null : Remote.song(c.getCurrentMediaItem());
+        if (s == null) return;
+        Db db = LyreApp.get().db();
+        db.setFavorite(s.path, !db.isFavorite(s.path));
+        updateHeart(s);
+        PlaybackService svc = PlaybackService.get();
+        if (svc != null) svc.updateWidgets();
     }
 
     // ---------------------------------------------------------------- queue
@@ -479,5 +512,12 @@ public class NowPlayingActivity extends Activity implements Actions.Host {
         Song s = c == null ? null : Remote.song(c.getCurrentMediaItem());
         if (s == null) return;
         Actions.song(this, anchor, s, null, null);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Theme or accent changed in Settings while this screen was open.
+        if (themeVersion != Theme.version) recreate();
     }
 }

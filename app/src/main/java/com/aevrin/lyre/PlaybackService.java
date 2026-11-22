@@ -112,6 +112,7 @@ public class PlaybackService extends MediaSessionService {
         player.addListener(new Player.Listener() {
             @Override
             public void onMediaItemTransition(@Nullable MediaItem item, int reason) {
+                updateWidgets();
                 finishTrack(reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK && !skippingFailed);
                 skippingFailed = false;
                 onTrackChanged();
@@ -144,6 +145,7 @@ public class PlaybackService extends MediaSessionService {
 
             @Override
             public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
+                updateWidgets();
                 if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM
                         && sleepEndOfTrack) {
                     sleepEndOfTrack = false;
@@ -198,6 +200,8 @@ public class PlaybackService extends MediaSessionService {
     @Override
     public void onDestroy() {
         instance = null;
+        LyreApp.get().prefs().raw().edit().putBoolean("w_playing", false).apply();
+        Widget.updateAll(this);
         if (playingSince > 0) {
             listened += SystemClock.elapsedRealtime() - playingSince;
             playingSince = 0;
@@ -397,6 +401,30 @@ public class PlaybackService extends MediaSessionService {
         player.prepare();
         finishTrack(false);
         onTrackChanged();
+        updateWidgets();
+    }
+
+    // ---------------------------------------------------------------- widgets
+
+    private final java.util.concurrent.ExecutorService widgetIo = Executors.newSingleThreadExecutor();
+    private long widgetArtId = -1;
+
+    /** Pushes the current track and play state to any home-screen widgets. */
+    public void updateWidgets() {
+        if (player == null) return;
+        final Song s = currentSong();
+        final boolean playing = player.getPlayWhenReady();
+        final long id = s == null ? -2 : s.id;
+        final boolean artChanged = id != widgetArtId;
+        widgetArtId = id;
+        widgetIo.execute(() -> {
+            Bitmap art = null;
+            if (artChanged && s != null) {
+                try { art = getContentResolver().loadThumbnail(s.uri(), new Size(320, 320), null); }
+                catch (Exception ignored) { }
+            }
+            Widget.save(this, s == null ? null : s.title, s == null ? "" : s.artist, playing, art, artChanged);
+        });
     }
 
     // ---------------------------------------------------------------- extras for the UI
@@ -404,6 +432,7 @@ public class PlaybackService extends MediaSessionService {
     public Normalizer.Info normInfo() { return normalizer.info(); }
     public boolean canBoost() { return normalizer.canBoost(); }
     public void reapplyGain() { normalizer.reapply(); }
+    public void applyEq() { normalizer.applyEq(); }
     public void measureAll() { normalizer.measureAll(library.songs()); }
     public void cancelMeasureAll() { normalizer.cancelBulk(); }
     public boolean measuring() { return normalizer.bulkRunning(); }

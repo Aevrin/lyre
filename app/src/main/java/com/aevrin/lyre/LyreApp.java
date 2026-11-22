@@ -38,6 +38,7 @@ public class LyreApp extends Application {
     public void applyTheme(int theme) {
         UiModeManager ui = getSystemService(UiModeManager.class);
         if (ui == null) return;
+        Theme.version++;
         int mode = theme == Prefs.THEME_LIGHT ? UiModeManager.MODE_NIGHT_NO
                 : theme == Prefs.THEME_SYSTEM ? UiModeManager.MODE_NIGHT_AUTO
                 : UiModeManager.MODE_NIGHT_YES;

@@ -47,6 +47,8 @@ import java.util.List;
 /** The library: tabs, drill-down pages, search and the mini player. */
 public class MainActivity extends Activity implements Library.Listener, Actions.Host {
 
+    private int themeVersion;
+
     static final String EXTRA_KIND = "open_kind", EXTRA_KEY = "open_key";
     private static final int REQ_PERM = 1, REQ_EXPORT = 2, REQ_IMPORT = 3, REQ_EXPORT_ALL = 4;
 
@@ -105,6 +107,8 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        Theme.apply(this);
+        themeVersion = Theme.version;
         LyreApp app = (LyreApp) getApplication();
         library = app.library();
         db = app.db();
@@ -524,6 +528,31 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
                 }));
                 rows.add(RowAdapter.Row.action(R.drawable.ic_folder, "Export all to a folder…", v ->
                         startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), REQ_EXPORT_ALL)));
+                {
+                    List<Song> favs = library.resolve(db.favorites());
+                    RowAdapter.Row fr = new RowAdapter.Row();
+                    fr.type = RowAdapter.GROUP;
+                    fr.t1 = "Favorites";
+                    fr.t2 = Library.plural(favs.size(), "song");
+                    fr.icon = R.drawable.ic_heart;
+                    fr.click = v -> push(new Page(Actions.FAVORITES, "fav"));
+                    fr.menu = anchor -> {
+                        PopupMenu m = new PopupMenu(this, anchor);
+                        m.getMenu().add(0, 1, 0, "Play");
+                        m.getMenu().add(0, 2, 0, "Shuffle");
+                        m.getMenu().add(0, 3, 0, "Export M3U…");
+                        m.setOnMenuItemClickListener(it -> {
+                            List<Song> f = library.resolve(db.favorites());
+                            if (it.getItemId() == 1) remote.play(f, 0, false);
+                            else if (it.getItemId() == 2) remote.play(f, 0, true);
+                            else exportFavorites();
+                            return true;
+                        });
+                        m.show();
+                    };
+                    rows.add(RowAdapter.Row.header("Favorites"));
+                    rows.add(fr);
+                }
                 List<Db.SmartRow> smarts = db.smartPlaylists();
                 if (!smarts.isEmpty()) rows.add(RowAdapter.Row.header("Dynamic playlists"));
                 for (Db.SmartRow sr : smarts) rows.add(smartRow(sr));
@@ -584,6 +613,19 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
                 addSongs(rows, songs, false, id);
                 if (missing == 0) adapter.setDragStarter(h -> dragger.startDrag(h));
                 empty = "Empty playlist. Add songs from their ⋮ menu.";
+                break;
+            }
+            case Actions.FAVORITES: {
+                detail = true;
+                List<String> paths = db.favorites();
+                List<Song> songs = library.resolve(paths);
+                pageSongs = songs;
+                long dur = 0;
+                for (Song x : songs) dur += x.duration;
+                headerTitle.setText("Favorites");
+                headerSub.setText(Library.plural(songs.size(), "song") + " · " + Library.time(dur) + " · newest first");
+                addSongs(rows, songs, false, null);
+                empty = "No favorites yet. Tap the heart on Now Playing, or use a song's ⋮ menu.";
                 break;
             }
             case Actions.SMART: {
@@ -729,6 +771,7 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
         m.getMenu().add(0, 3, 0, "Play next");
         m.getMenu().add(0, 4, 0, "Add to queue");
         m.getMenu().add(0, 5, 0, "Add all to playlist…");
+        m.getMenu().add(0, 8, 0, "Add all to favorites");
         m.getMenu().add(0, 6, 0, "Edit tags (" + n + ")");
         m.getMenu().add(0, 7, 0, "Blacklist all");
         m.setOnMenuItemClickListener(it -> {
@@ -739,6 +782,7 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
                 case 4: remote.enqueue(songs); Ui.toast(this, "Added to queue"); break;
                 case 5: Actions.addToPlaylist(this, songs); break;
                 case 6: Actions.editTags(this, songs); break;
+                case 8: Actions.favoriteAll(this, songs); break;
                 case 7:
                     Ui.confirm(this, "Blacklist " + n + "?", "Each song is added to the blacklist. You can remove them "
                             + "in Settings → Blacklist, or switch the blacklist off to show them again.", "Blacklist", () -> {
@@ -765,6 +809,18 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
         r.click = v -> push(new Page(Actions.SMART, String.valueOf(sr.id)));
         r.menu = anchor -> smartMenu(anchor, sr.id);
         return r;
+    }
+
+    private boolean exportFavs;
+
+    private void exportFavorites() {
+        exportFavs = true;
+        exportPlaylistId = -1;
+        exportSmartId = -1;
+        startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType(PlaylistIo.MIME)
+                .putExtra(Intent.EXTRA_TITLE, "Favorites.m3u"), REQ_EXPORT);
     }
 
     private void openSmartEditor(long id, int preset) {
@@ -818,6 +874,7 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
                 case 8:
                     exportSmartId = id;
                     exportPlaylistId = -1;
+                    exportFavs = false;
                     startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
                             .addCategory(Intent.CATEGORY_OPENABLE)
                             .setType(PlaylistIo.MIME)
@@ -852,7 +909,23 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
 
     private void headerMenu(View anchor) {
         Page p = top();
-        if (p.type == Actions.PLAYLIST) {
+        if (p.type == Actions.FAVORITES) {
+            PopupMenu m = new PopupMenu(this, anchor);
+            m.getMenu().add(0, 1, 0, "Play next");
+            m.getMenu().add(0, 2, 0, "Add to queue");
+            m.getMenu().add(0, 3, 0, "Add all to playlist…");
+            m.getMenu().add(0, 4, 0, "Export M3U…");
+            m.setOnMenuItemClickListener(it -> {
+                switch (it.getItemId()) {
+                    case 1: remote.playNext(pageSongs); break;
+                    case 2: remote.enqueue(pageSongs); break;
+                    case 3: Actions.addToPlaylist(this, pageSongs); break;
+                    default: exportFavorites(); break;
+                }
+                return true;
+            });
+            m.show();
+        } else if (p.type == Actions.PLAYLIST) {
             playlistMenu(anchor, Long.parseLong(p.key), db.playlistName(Long.parseLong(p.key)));
         } else if (p.type == Actions.SMART) {
             smartMenu(anchor, Long.parseLong(p.key));
@@ -881,6 +954,7 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
                 case 6:
                     exportPlaylistId = id;
                     exportSmartId = -1;
+                    exportFavs = false;
                     startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
                             .addCategory(Intent.CATEGORY_OPENABLE)
                             .setType(PlaylistIo.MIME)
@@ -940,9 +1014,11 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
         if (res != RESULT_OK || data == null || data.getData() == null) return;
         Uri uri = data.getData();
         try {
-            if (req == REQ_EXPORT && (exportPlaylistId >= 0 || exportSmartId >= 0)) {
-                List<Song> songs = exportSmartId >= 0 ? smartSongs(exportSmartId)
+            if (req == REQ_EXPORT && (exportPlaylistId >= 0 || exportSmartId >= 0 || exportFavs)) {
+                List<Song> songs = exportFavs ? library.resolve(db.favorites())
+                        : exportSmartId >= 0 ? smartSongs(exportSmartId)
                         : library.resolve(db.playlistPaths(exportPlaylistId));
+                exportFavs = false;
                 PlaylistIo.export(getContentResolver(), uri, songs, prefs.m3uRelative());
                 Ui.toast(this, "Exported " + Library.plural(songs.size(), "song"));
             } else if (req == REQ_IMPORT) {
@@ -999,6 +1075,7 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
     @Override
     protected void onResume() {
         super.onResume();
+        if (themeVersion != Theme.version) { recreate(); return; }
         // Coming back from system settings with the permission granted.
         if (library.hasPermission() && !library.isLoaded()) {
             library.reload();

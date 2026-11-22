@@ -13,7 +13,7 @@ public final class Prefs {
     // Normalization modes
     public static final int NORM_OFF = 0, NORM_AUTO = 1, NORM_TRACK = 2, NORM_ALBUM = 3;
     // Theme
-    public static final int THEME_DARK = 0, THEME_LIGHT = 1, THEME_SYSTEM = 2;
+    public static final int THEME_DARK = 0, THEME_LIGHT = 1, THEME_SYSTEM = 2, THEME_BLACK = 3;
 
     private final SharedPreferences sp;
 
@@ -60,6 +60,14 @@ public final class Prefs {
 
     public int theme() { return sp.getInt("theme", THEME_DARK); }
     public void theme(int v) { sp.edit().putInt("theme", v).apply(); }
+
+    public int accent() { return sp.getInt("accent", 0); }
+    public void accent(int v) { sp.edit().putInt("accent", v).apply(); }
+
+    public boolean eqOn() { return sp.getBoolean("eq_on", false); }
+    public void eqOn(boolean v) { sp.edit().putBoolean("eq_on", v).apply(); }
+    public float[] eqGains() { return Eq.decode(sp.getString("eq_gains", "")); }
+    public void eqGains(float[] g) { sp.edit().putString("eq_gains", Eq.encode(g)).apply(); }
 
     public int tab() { return sp.getInt("tab", 0); }
     public void tab(int v) { sp.edit().putInt("tab", v).apply(); }

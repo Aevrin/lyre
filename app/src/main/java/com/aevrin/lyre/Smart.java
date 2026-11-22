@@ -26,9 +26,9 @@ public final class Smart {
 
     // Fields
     public static final int TITLE = 0, ARTIST = 1, ALBUM = 2, ALBUM_ARTIST = 3, GENRE = 4, FOLDER = 5,
-            YEAR = 6, LENGTH = 7, PLAYS = 8, LAST_PLAYED = 9, ADDED = 10, SKIPS = 11;
+            YEAR = 6, LENGTH = 7, PLAYS = 8, LAST_PLAYED = 9, ADDED = 10, SKIPS = 11, FAVORITE = 12;
     public static final String[] FIELD_NAMES = {"Title", "Artist", "Album", "Album artist", "Genre", "Folder",
-            "Year", "Length (minutes)", "Play count", "Last played", "Date added", "Skip count"};
+            "Year", "Length (minutes)", "Play count", "Last played", "Date added", "Skip count", "Favorite"};
 
     // Operators by field kind
     public static final int CONTAINS = 0, NOT_CONTAINS = 1, IS = 2, IS_NOT = 3, STARTS = 4;   // text
@@ -38,6 +38,8 @@ public final class Smart {
     public static final String[] TEXT_OPS = {"contains", "doesn't contain", "is", "isn't", "starts with"};
     public static final String[] NUM_OPS = {"more than", "less than", "is", "isn't", "at least", "at most"};
     public static final String[] DATE_OPS = {"in the last … days", "more than … days ago", "never", "ever"};
+    public static final int IS_FAV = 0, NOT_FAV = 1;
+    public static final String[] FAV_OPS = {"is a favorite", "isn't a favorite"};
 
     // Sorts
     public static final int SORT_RANDOM = 0, SORT_TITLE = 1, SORT_ARTIST = 2, SORT_ALBUM = 3, SORT_ADDED_NEW = 4,
@@ -48,13 +50,15 @@ public final class Smart {
 
     public static boolean isText(int f) { return f <= FOLDER; }
     public static boolean isDate(int f) { return f == LAST_PLAYED || f == ADDED; }
-    public static String[] opsFor(int f) { return isText(f) ? TEXT_OPS : isDate(f) ? DATE_OPS : NUM_OPS; }
-    /** Date ops "never"/"ever" take no value. */
-    public static boolean needsValue(int f, int op) { return !(isDate(f) && (op == NEVER || op == EVER)); }
+    public static boolean isFlag(int f) { return f == FAVORITE; }
+    public static String[] opsFor(int f) { return isText(f) ? TEXT_OPS : isDate(f) ? DATE_OPS : isFlag(f) ? FAV_OPS : NUM_OPS; }
+    /** Date ops "never"/"ever" and yes/no fields take no value. */
+    public static boolean needsValue(int f, int op) { return !isFlag(f) && !(isDate(f) && (op == NEVER || op == EVER)); }
 
     /** Play statistics for one file. */
     public static final class Stat {
         public int plays, skips;
+        public boolean favorite;
         public long lastPlayed; // ms, 0 = never
     }
 
@@ -114,7 +118,7 @@ public final class Smart {
     // ---------------------------------------------------------------- presets
 
     public static String[] PRESET_NAMES = {"Blank", "Recently added", "Most played", "Never played",
-            "Not played in a year", "Long tracks (over 10 minutes)"};
+            "Not played in a year", "Long tracks (over 10 minutes)", "Favorites I haven't heard lately"};
 
     public static Smart preset(int i) {
         Smart s = new Smart();
@@ -124,6 +128,8 @@ public final class Smart {
             case 3: s.name = "Never played"; s.rules.add(new Rule(LAST_PLAYED, NEVER, "")); break;
             case 4: s.name = "Not played in a year"; s.rules.add(new Rule(LAST_PLAYED, OLDER, "365")); s.sort = SORT_LONGEST_AGO; break;
             case 5: s.name = "Long tracks"; s.rules.add(new Rule(LENGTH, GT, "10")); s.sort = SORT_LONGEST; break;
+            case 6: s.name = "Forgotten favorites"; s.rules.add(new Rule(FAVORITE, IS_FAV, ""));
+                s.rules.add(new Rule(LAST_PLAYED, OLDER, "60")); s.sort = SORT_LONGEST_AGO; break;
             default: s.rules.add(new Rule(ARTIST, CONTAINS, "")); break;
         }
         return s;
@@ -153,6 +159,10 @@ public final class Smart {
     }
 
     static boolean test(Rule r, Song s, Stat st, long now) {
+        if (isFlag(r.field)) {
+            boolean fav = st != null && st.favorite;
+            return r.op == NOT_FAV ? !fav : fav;
+        }
         if (isText(r.field)) {
             String v = text(r.field, s).toLowerCase(Locale.ROOT);
             String q = r.value.trim().toLowerCase(Locale.ROOT);
@@ -254,7 +264,9 @@ public final class Smart {
             String[] ops = opsFor(r.field);
             String op = r.op >= 0 && r.op < ops.length ? ops[r.op] : "?";
             String f = r.field >= 0 && r.field < FIELD_NAMES.length ? FIELD_NAMES[r.field] : "?";
-            if (isDate(r.field)) {
+            if (isFlag(r.field)) {
+                sb.append(op.substring(0, 1).toUpperCase(Locale.ROOT)).append(op.substring(1));
+            } else if (isDate(r.field)) {
                 sb.append(f).append(' ').append(needsValue(r.field, r.op) ? op.replace("…", r.value.trim()) : op);
             } else {
                 sb.append(f).append(' ').append(op).append(' ').append(r.value.trim());

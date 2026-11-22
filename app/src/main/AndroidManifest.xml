@@ -61,8 +61,50 @@
             android:exported="false" />
 
         <activity
+            android:name=".BlacklistActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
+
+        <activity
+            android:name=".EqualizerActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".SettingsActivity"
             android:exported="false" />
+
+        <receiver
+            android:name=".WidgetSmall"
+            android:exported="false"
+            android:label="@string/widget_small">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_small_info" />
+        </receiver>
+
+        <receiver
+            android:name=".WidgetLarge"
+            android:exported="false"
+            android:label="@string/widget_large">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_large_info" />
+        </receiver>
+
+        <!-- Widget buttons, headset buttons and "resume playback" when Lyre isn't running. -->
+        <receiver
+            android:name="androidx.media3.session.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
 
         <service
             android:name=".PlaybackService"

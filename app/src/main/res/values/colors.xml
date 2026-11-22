@@ -13,4 +13,8 @@
     <color name="button">#3D52A0</color>
     <color name="error">#C0392B</color>
     <color name="icon_bg">#0F1A2A</color>
+    <color name="widget_bg">#FFFFFF</color>
+    <color name="widget_text">#222222</color>
+    <color name="widget_text_muted">#666666</color>
+    <color name="widget_icon">#3D52A0</color>
 </resources>

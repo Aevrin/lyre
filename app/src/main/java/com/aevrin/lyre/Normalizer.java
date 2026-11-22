@@ -76,14 +76,16 @@ final class Normalizer {
         this.db = db;
         this.prefs = prefs;
         try {
+            // Pre-EQ stage carries the equalizer; the limiter catches peaks from boosts.
             DynamicsProcessing.Config cfg = new DynamicsProcessing.Config.Builder(
                     DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION, 2,
-                    false, 0, false, 0, false, 0, true).build();
+                    true, Eq.BANDS, false, 0, false, 0, true).build();
             dp = new DynamicsProcessing(0, sessionId, cfg);
             dp.setLimiterAllChannelsTo(new DynamicsProcessing.Limiter(
                     true, true, 0, 1f, 60f, 10f, -1f, 0f));
             dp.setInputGainAllChannelsTo(0f);
             dp.setEnabled(true);
+            applyEq();
         } catch (RuntimeException | UnsatisfiedLinkError e) {
             android.util.Log.w("Lyre", "DynamicsProcessing unavailable; cut-only normalization", e);
             dp = null;
@@ -171,10 +173,31 @@ final class Normalizer {
         info = new Info(gain, src);
     }
 
+    private float lastGain;
+
+    /** Pushes the equalizer settings to the effect. */
+    void applyEq() {
+        if (dp == null) return;
+        boolean on = prefs.eqOn();
+        float[] g = prefs.eqGains();
+        try {
+            DynamicsProcessing.Eq eq = new DynamicsProcessing.Eq(true, on, Eq.BANDS);
+            for (int i = 0; i < Eq.BANDS; i++) {
+                eq.setBand(i, new DynamicsProcessing.EqBand(true, Eq.CUTOFF[i], on ? g[i] : 0f));
+            }
+            dp.setPreEqAllChannelsTo(eq);
+            set(lastGain);   // headroom depends on the EQ
+        } catch (RuntimeException e) {
+            android.util.Log.w("Lyre", "Couldn't apply EQ", e);
+        }
+    }
+
     private void set(float db) {
+        lastGain = db;
         if (dp != null) {
             try {
-                dp.setInputGainAllChannelsTo(db);
+                float headroom = prefs.eqOn() ? Eq.headroom(prefs.eqGains()) : 0f;
+                dp.setInputGainAllChannelsTo(db - headroom);
                 player.setVolume(1f);
                 return;
             } catch (RuntimeException e) {

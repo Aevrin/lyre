@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Accent overlays applied at runtime (Theme.apply). -->
+    <style name="Accent.Aqua">
+        <item name="android:colorAccent">#06B6D4</item>
+        <item name="android:colorControlActivated">#06B6D4</item>
+    </style>
+    <style name="Accent.Blue">
+        <item name="android:colorAccent">#60A5FA</item>
+        <item name="android:colorControlActivated">#60A5FA</item>
+    </style>
+    <style name="Accent.Teal">
+        <item name="android:colorAccent">#14B8A6</item>
+        <item name="android:colorControlActivated">#14B8A6</item>
+    </style>
+    <style name="Accent.Indigo">
+        <item name="android:colorAccent">#818CF8</item>
+        <item name="android:colorControlActivated">#818CF8</item>
+    </style>
+    <style name="Accent.Purple">
+        <item name="android:colorAccent">#A78BFA</item>
+        <item name="android:colorControlActivated">#A78BFA</item>
+    </style>
+    <style name="Accent.Green">
+        <item name="android:colorAccent">#34D399</item>
+        <item name="android:colorControlActivated">#34D399</item>
+    </style>
+</resources>

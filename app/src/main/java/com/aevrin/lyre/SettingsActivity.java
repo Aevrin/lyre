@@ -24,12 +24,15 @@ import java.util.Locale;
 /** All settings on one scrolling page, built in code. Changes apply immediately. */
 public class SettingsActivity extends Activity implements Library.Listener {
 
+    private int themeVersion;
+
+    private static final int REQ_BACKUP = 21, REQ_RESTORE = 22;
     private Prefs prefs;
     private Db db;
     private Library library;
     private Remote remote;
     private LinearLayout content;
-    private LinearLayout blacklistBox;
+    private android.widget.Button blacklistButton;
     private TextView blacklistStatus, measureStatus;
     private android.widget.Button measureButton;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -43,6 +46,8 @@ public class SettingsActivity extends Activity implements Library.Listener {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        Theme.apply(this);
+        themeVersion = Theme.version;
         LyreApp app = (LyreApp) getApplication();
         prefs = app.prefs();
         db = app.db();
@@ -93,10 +98,22 @@ public class SettingsActivity extends Activity implements Library.Listener {
     @Override
     public void onLibraryChanged() { updateBlacklistStatus(); }
 
+    @Override
+    protected void onRestart() {
+        super.onRestart();
+        updateBlacklistStatus();   // back from the blacklist screen
+    }
+
     // ---------------------------------------------------------------- page
 
     private void buildAll() {
         content.removeAllViews();
+
+        section("Sound");
+        LinearLayout eqb = buttons();
+        eqb.addView(Ui.button(this, "Equalizer" + (prefs.eqOn() ? " (on)" : ""),
+                v -> startActivity(new Intent(this, EqualizerActivity.class))));
+        content.addView(eqb);
 
         section("Volume normalization");
         String[] modes = {"Off", "Auto (measure loudness)", "ReplayGain: track", "ReplayGain: album"};
@@ -148,20 +165,11 @@ public class SettingsActivity extends Activity implements Library.Listener {
                     updateBlacklistStatus();
                 });
         blacklistStatus = note("");
-        blacklistBox = new LinearLayout(this);
-        blacklistBox.setOrientation(LinearLayout.VERTICAL);
-        content.addView(blacklistBox, Ui.matchWrap());
         LinearLayout bb = buttons();
-        bb.addView(Ui.button(this, "Add folder…", v -> addFolder()));
-        bb.addView(gap());
-        bb.addView(Ui.button(this, "Clear all", v -> Ui.confirm(this, "Clear the blacklist?",
-                "Every entry is removed. To show everything but keep the list, switch it off instead.", "Clear", () -> {
-                    db.clearBlacklist();
-                    library.refilter();
-                    renderBlacklist();
-                })));
+        blacklistButton = Ui.button(this, "Manage blacklist", v -> startActivity(new Intent(this, BlacklistActivity.class)));
+        bb.addView(blacklistButton);
         content.addView(bb);
-        renderBlacklist();
+        updateBlacklistStatus();
 
         section("Library");
         toggle("Music only", "Skip files the media scanner doesn't mark as music (ringtones, recordings, notifications).",
@@ -188,11 +196,30 @@ public class SettingsActivity extends Activity implements Library.Listener {
                 + "whole music folder moves or syncs to another device. Off writes full paths.",
                 prefs.m3uRelative(), prefs::m3uRelative);
 
+        section("Backup");
+        note("Saves playlists, dynamic playlists, the blacklist, favorites, play counts, loudness measurements "
+                + "and settings to one file. Keeping it in a synced folder means it survives a reinstall or a new phone.");
+        LinearLayout bk = buttons();
+        bk.addView(Ui.button(this, "Back up…", v -> startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("application/json")
+                .putExtra(Intent.EXTRA_TITLE, "lyre-backup-" + java.time.LocalDate.now() + ".json"), REQ_BACKUP)));
+        bk.addView(gap());
+        bk.addView(Ui.button(this, "Restore…", v -> startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("*/*"), REQ_RESTORE)));
+        content.addView(bk);
+
         section("Appearance");
-        String[] themes = {"Dark", "Light", "Follow system"};
-        choice("Theme", themes, prefs.theme(), null, w -> {
+        choice("Theme", Theme.THEME_NAMES, prefs.theme(), "Black uses true black backgrounds, which saves power on OLED screens.", w -> {
             prefs.theme(w);
             ((LyreApp) getApplication()).applyTheme(w);
+            recreate();
+        });
+        choice("Accent color", Theme.ACCENT_NAMES, prefs.accent(), "Used for highlights, buttons and the playing song.", w -> {
+            prefs.accent(w);
+            Theme.version++;
+            recreate();
         });
 
         section("About");
@@ -235,62 +262,22 @@ public class SettingsActivity extends Activity implements Library.Listener {
 
     // ---------------------------------------------------------------- blacklist
 
-    private void renderBlacklist() {
-        blacklistBox.removeAllViews();
-        List<Db.BlEntry> list = db.blacklist();
-        if (list.isEmpty()) {
-            TextView t = note("Empty. Blacklist songs, albums, artists, genres or folders from their ⋮ menu.");
-            ((ViewGroup) t.getParent()).removeView(t);
-            blacklistBox.addView(t);
-        }
-        for (Db.BlEntry e : list) {
-            LinearLayout row = new LinearLayout(this);
-            Ui.center(row);
-            row.setPadding(Ui.dp(this, 20), 0, Ui.dp(this, 8), 0);
-            LinearLayout texts = new LinearLayout(this);
-            texts.setOrientation(LinearLayout.VERTICAL);
-            texts.addView(Ui.text(this, e.label == null ? e.value : e.label, 15, R.color.text_primary, false));
-            texts.addView(Ui.text(this, capital(e.type), 12, R.color.text_muted, false));
-            row.addView(texts, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-            row.addView(Ui.icon(this, R.drawable.ic_close, "Remove", v -> {
-                db.removeBlacklist(e.id);
-                library.refilter();
-                renderBlacklist();
-            }));
-            blacklistBox.addView(row, Ui.matchWrap());
-        }
-        updateBlacklistStatus();
-    }
-
     private void updateBlacklistStatus() {
         if (blacklistStatus == null) return;
-        int n = db.blacklist().size();
-        if (!prefs.blacklistOn()) {
-            blacklistStatus.setText("Off: " + Library.plural(n, "entry").replace("entrys", "entries") + " kept, nothing hidden.");
-        } else {
-            blacklistStatus.setText("Hiding " + Library.plural(library.hiddenCount(), "song") + ".");
+        List<Db.BlEntry> list = db.blacklist();
+        java.util.Map<String, Integer> byType = new java.util.LinkedHashMap<>();
+        for (Db.BlEntry e : list) byType.merge(e.type, 1, Integer::sum);
+        StringBuilder parts = new StringBuilder();
+        for (java.util.Map.Entry<String, Integer> e : byType.entrySet()) {
+            if (parts.length() > 0) parts.append(", ");
+            parts.append(BlacklistActivity.count(e.getValue(), e.getKey()));
         }
-    }
-
-    /** Pick from the folders that hold music, plus their parents. */
-    private void addFolder() {
-        java.util.TreeSet<String> set = new java.util.TreeSet<>();
-        boolean was = prefs.blacklistOn();
-        for (Library.Group g : library.folders()) {
-            String f = g.key;
-            while (f != null && f.length() > 1 && !f.equals("/storage") && !f.equals("/storage/emulated")) {
-                set.add(f);
-                int slash = f.lastIndexOf('/');
-                f = slash > 0 ? f.substring(0, slash) : null;
-            }
-        }
-        String[] items = set.toArray(new String[0]);
-        if (items.length == 0) { Ui.toast(this, was ? "No visible folders" : "No folders"); return; }
-        Ui.choose(this, "Blacklist folder (and subfolders)", items, -1, w -> {
-            db.addBlacklist(Db.BL_FOLDER, items[w], items[w]);
-            library.refilter();
-            renderBlacklist();
-        });
+        String what = list.isEmpty() ? "Empty. Blacklist songs, albums, artists, genres or folders from their ⋮ menu."
+                : Library.plural(list.size(), "entry").replace("entrys", "entries") + " (" + parts + ").";
+        String state = !prefs.blacklistOn() ? " Off: nothing hidden."
+                : list.isEmpty() ? "" : " Hiding " + Library.plural(library.hiddenCount(), "song") + ".";
+        blacklistStatus.setText(what + state);
+        if (blacklistButton != null) blacklistButton.setText(list.isEmpty() ? "Manage blacklist" : "Manage blacklist (" + list.size() + ")");
     }
 
     // ---------------------------------------------------------------- row builders
@@ -367,6 +354,52 @@ public class SettingsActivity extends Activity implements Library.Listener {
         content.addView(row, Ui.matchWrap());
     }
 
+    @Override
+    protected void onActivityResult(int req, int res, Intent data) {
+        super.onActivityResult(req, res, data);
+        if (res != RESULT_OK || data == null || data.getData() == null) return;
+        Uri uri = data.getData();
+        if (req == REQ_BACKUP) {
+            new Thread(() -> {
+                String msg;
+                try {
+                    Backup.write(getContentResolver(), uri, db, prefs);
+                    msg = "Backed up";
+                } catch (Exception e) {
+                    msg = "Backup failed: " + e.getMessage();
+                }
+                final String m = msg;
+                main.post(() -> Ui.toast(this, m));
+            }).start();
+        } else if (req == REQ_RESTORE) {
+            org.json.JSONObject root;
+            try {
+                root = Backup.read(getContentResolver(), uri);
+            } catch (Exception e) {
+                Ui.toast(this, "Can't restore: " + e.getMessage());
+                return;
+            }
+            final org.json.JSONObject backup = root;
+            Ui.confirm(this, "Restore this backup?", "It contains " + Backup.describe(backup) + ".\n\n"
+                    + "Lyre's current playlists, blacklist, favorites, play counts and settings are replaced. "
+                    + "Music files aren't touched.", "Restore", () -> {
+                try {
+                    Backup.restore(backup, db, prefs);
+                } catch (Exception e) {
+                    Ui.toast(this, "Restore failed: " + e.getMessage());
+                    return;
+                }
+                LyreApp app = (LyreApp) getApplication();
+                app.applyTheme(prefs.theme());
+                library.reload();
+                PlaybackService svc = PlaybackService.get();
+                if (svc != null) { svc.applyEq(); svc.reapplyGain(); }
+                Ui.toast(this, "Restored");
+                recreate();
+            });
+        }
+    }
+
     private static int indexOf(int[] a, int v) {
         for (int i = 0; i < a.length; i++) if (a[i] == v) return i;
         return -1;
@@ -379,5 +412,12 @@ public class SettingsActivity extends Activity implements Library.Listener {
 
     private static String capital(String s) {
         return s.isEmpty() ? s : s.substring(0, 1).toUpperCase(Locale.ROOT) + s.substring(1);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Theme or accent changed in Settings while this screen was open.
+        if (themeVersion != Theme.version) recreate();
     }
 }

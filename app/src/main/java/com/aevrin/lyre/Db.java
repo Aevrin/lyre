@@ -46,7 +46,7 @@ public final class Db extends SQLiteOpenHelper {
     }
 
     public Db(Context c) {
-        super(c, "lyre.db", null, 3);
+        super(c, "lyre.db", null, 4);
     }
 
     @Override
@@ -58,12 +58,45 @@ public final class Db extends SQLiteOpenHelper {
         db.execSQL("CREATE TABLE gains (path TEXT PRIMARY KEY, size INTEGER, mtime INTEGER, lufs REAL, peak REAL, rg_track REAL, rg_album REAL, rg_checked INTEGER DEFAULT 0)");
         createV2(db);
         createV3(db);
+        createV4(db);
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldV, int newV) {
         if (oldV < 2) createV2(db);
         if (oldV < 3) createV3(db);
+        if (oldV < 4) createV4(db);
+    }
+
+    /** Version 4: favorites. */
+    private static void createV4(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS favorites (path TEXT PRIMARY KEY, added INTEGER NOT NULL)");
+    }
+
+    public boolean isFavorite(String path) {
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT 1 FROM favorites WHERE path=?", new String[]{path})) {
+            return c.moveToFirst();
+        }
+    }
+
+    public void setFavorite(String path, boolean on) {
+        if (on) {
+            ContentValues v = new ContentValues();
+            v.put("path", path);
+            v.put("added", System.currentTimeMillis());
+            getWritableDatabase().insertWithOnConflict("favorites", null, v, SQLiteDatabase.CONFLICT_IGNORE);
+        } else {
+            getWritableDatabase().delete("favorites", "path=?", new String[]{path});
+        }
+    }
+
+    /** Favorite paths, most recently added first. */
+    public List<String> favorites() {
+        List<String> out = new ArrayList<>();
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT path FROM favorites ORDER BY added DESC", null)) {
+            while (c.moveToNext()) out.add(c.getString(0));
+        }
+        return out;
     }
 
     /** Version 3: files that failed to play. */
@@ -123,6 +156,13 @@ public final class Db extends SQLiteOpenHelper {
                 st.skips = c.getInt(2);
                 st.lastPlayed = c.getLong(3);
                 m.put(c.getString(0), st);
+            }
+        }
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT path FROM favorites", null)) {
+            while (c.moveToNext()) {
+                Smart.Stat st = m.get(c.getString(0));
+                if (st == null) { st = new Smart.Stat(); m.put(c.getString(0), st); }
+                st.favorite = true;
             }
         }
         return m;
@@ -276,6 +316,7 @@ public final class Db extends SQLiteOpenHelper {
         v.put("path", newPath);
         getWritableDatabase().update("playlist_items", v, "path=?", new String[]{oldPath});
         getWritableDatabase().updateWithOnConflict("plays", v, "path=?", new String[]{oldPath}, SQLiteDatabase.CONFLICT_IGNORE);
+        getWritableDatabase().updateWithOnConflict("favorites", v, "path=?", new String[]{oldPath}, SQLiteDatabase.CONFLICT_IGNORE);
     }
 
     // ---------------------------------------------------------------- blacklist
@@ -368,4 +409,60 @@ public final class Db extends SQLiteOpenHelper {
     private static void put(ContentValues v, String k, float f) {
         if (Float.isNaN(f)) v.putNull(k); else v.put(k, f);
     }
+
+    // ---------------------------------------------------------------- backup
+
+    /** Tables included in a backup. */
+    static final String[] BACKUP_TABLES = {"playlists", "playlist_items", "smart", "blacklist", "plays", "favorites", "gains"};
+
+    org.json.JSONArray dump(String table) throws org.json.JSONException {
+        org.json.JSONArray rows = new org.json.JSONArray();
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT * FROM " + table, null)) {
+            String[] cols = c.getColumnNames();
+            while (c.moveToNext()) {
+                org.json.JSONObject o = new org.json.JSONObject();
+                for (int i = 0; i < cols.length; i++) {
+                    switch (c.getType(i)) {
+                        case Cursor.FIELD_TYPE_INTEGER: o.put(cols[i], c.getLong(i)); break;
+                        case Cursor.FIELD_TYPE_FLOAT: o.put(cols[i], c.getDouble(i)); break;
+                        case Cursor.FIELD_TYPE_STRING: o.put(cols[i], c.getString(i)); break;
+                        default: o.put(cols[i], org.json.JSONObject.NULL); break;
+                    }
+                }
+                rows.put(o);
+            }
+        }
+        return rows;
+    }
+
+    /** Replaces the contents of the given tables in one transaction. */
+    void load(java.util.Map<String, org.json.JSONArray> tables) throws org.json.JSONException {
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        try {
+            for (java.util.Map.Entry<String, org.json.JSONArray> t : tables.entrySet()) {
+                db.delete(t.getKey(), null, null);
+                org.json.JSONArray rows = t.getValue();
+                for (int r = 0; r < rows.length(); r++) {
+                    org.json.JSONObject o = rows.getJSONObject(r);
+                    ContentValues v = new ContentValues();
+                    java.util.Iterator<String> keys = o.keys();
+                    while (keys.hasNext()) {
+                        String k = keys.next();
+                        Object val = o.get(k);
+                        if (val == org.json.JSONObject.NULL) v.putNull(k);
+                        else if (val instanceof Integer || val instanceof Long) v.put(k, ((Number) val).longValue());
+                        else if (val instanceof Number) v.put(k, ((Number) val).doubleValue());
+                        else v.put(k, val.toString());
+                    }
+                    db.insert(t.getKey(), null, v);
+                }
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+    }
+
+    int version() { return getReadableDatabase().getVersion(); }
 }

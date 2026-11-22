@@ -47,6 +47,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class UnplayableActivity extends Activity implements Actions.Host {
 
+    private int themeVersion;
+
     private static final int REQ_TRASH = 1;
 
     private static final class Hit {
@@ -73,6 +75,8 @@ public class UnplayableActivity extends Activity implements Actions.Host {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        Theme.apply(this);
+        themeVersion = Theme.version;
         remote = new Remote(this, null);
         setContentView(build());
         scan(false);
@@ -318,5 +322,12 @@ public class UnplayableActivity extends Activity implements Actions.Host {
                 m.show();
             });
         }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Theme or accent changed in Settings while this screen was open.
+        if (themeVersion != Theme.version) recreate();
     }
 }

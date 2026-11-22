@@ -30,7 +30,7 @@ final class Actions {
     }
 
     // Group kinds, also used as page types in MainActivity.
-    static final int ALBUM = 1, ARTIST = 2, GENRE = 3, FOLDER = 4, PLAYLIST = 5, SMART = 6;
+    static final int ALBUM = 1, ARTIST = 2, GENRE = 3, FOLDER = 4, PLAYLIST = 5, SMART = 6, FAVORITES = 7;
 
     /** Menu for one song. extra lets the caller add items (e.g. "Remove from playlist"). */
     static void song(Host h, View anchor, Song s, String extraLabel, Runnable extra) {
@@ -40,6 +40,8 @@ final class Actions {
         mm.add(0, 1, 0, "Play next");
         mm.add(0, 2, 0, "Add to queue");
         mm.add(0, 3, 0, "Add to playlist…");
+        boolean fav = LyreApp.get().db().isFavorite(s.path);
+        mm.add(0, 11, 0, fav ? "Remove from favorites" : "Add to favorites");
         mm.add(0, 4, 0, "Edit tags");
         mm.add(0, 5, 0, "Go to album");
         mm.add(0, 6, 0, "Go to artist");
@@ -60,6 +62,11 @@ final class Actions {
                 case 8: blacklist(h, Db.BL_SONG, s.path, s.title + " — " + s.artist); break;
                 case 9: blacklistFolder(h, s.folder); break;
                 case 10: details(a, s); break;
+                case 11:
+                    LyreApp.get().db().setFavorite(s.path, !fav);
+                    Ui.toast(a, fav ? "Removed from favorites" : "Added to favorites");
+                    h.refresh();
+                    break;
                 default: return false;
             }
             return true;
@@ -77,6 +84,7 @@ final class Actions {
         mm.add(0, 3, 0, "Play next");
         mm.add(0, 4, 0, "Add to queue");
         mm.add(0, 5, 0, "Add to playlist…");
+        mm.add(0, 8, 0, "Add all to favorites");
         mm.add(0, 6, 0, "Edit tags (" + Library.plural(g.songs.size(), "song") + ")");
         String what = kind == ALBUM ? "album" : kind == ARTIST ? "artist" : kind == GENRE ? "genre" : "folder";
         mm.add(0, 7, 0, "Blacklist " + what);
@@ -89,6 +97,7 @@ final class Actions {
                 case 4: h.remote().enqueue(songs); Ui.toast(a, "Added to queue"); break;
                 case 5: addToPlaylist(h, songs); break;
                 case 6: editTags(a, songs); break;
+                case 8: favoriteAll(h, songs); break;
                 case 7:
                     switch (kind) {
                         case ALBUM: blacklist(h, Db.BL_ALBUM, g.key, g.name + " — " + g.sub); break;
@@ -128,6 +137,13 @@ final class Actions {
                 h.refresh();
             }
         });
+    }
+
+    static void favoriteAll(Host h, List<Song> songs) {
+        Db db = LyreApp.get().db();
+        for (Song s : songs) db.setFavorite(s.path, true);
+        Ui.toast(h.activity(), "Added " + Library.plural(songs.size(), "song") + " to favorites");
+        h.refresh();
     }
 
     static void editTags(Activity a, List<Song> songs) {

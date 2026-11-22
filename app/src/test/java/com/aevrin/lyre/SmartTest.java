@@ -93,4 +93,18 @@ public class SmartTest {
         assertEquals(Smart.LENGTH, t.rules.get(0).field);
         assertEquals("10", t.rules.get(0).value);
     }
+
+    @Test
+    public void favoriteRule() {
+        Song a = song("A", "/a", 3, 1, 0), b = song("B", "/b", 3, 1, 0);
+        Map<String, Smart.Stat> stats = new HashMap<>();
+        Smart.Stat st = new Smart.Stat();
+        st.favorite = true;
+        stats.put(a.path, st);
+        Smart s = new Smart();
+        s.rules.add(new Smart.Rule(Smart.FAVORITE, Smart.IS_FAV, ""));
+        assertEquals(Arrays.asList(a), s.evaluate(Arrays.asList(a, b), stats, NOW));
+        s.rules.get(0).op = Smart.NOT_FAV;
+        assertEquals(Arrays.asList(b), s.evaluate(Arrays.asList(a, b), stats, NOW));
+    }
 }

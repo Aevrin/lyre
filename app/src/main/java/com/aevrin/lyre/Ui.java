@@ -38,7 +38,10 @@ final class Ui {
         return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, c.getResources().getDisplayMetrics()));
     }
 
-    static int color(Context c, int res) { return c.getColor(res); }
+    static int color(Context c, int res) {
+        Integer o = Theme.override(c, res);
+        return o != null ? o : c.getColor(res);
+    }
 
     /** Pads a root view for the status and navigation bars (Android 15+ is always edge-to-edge). */
     static void fitSystemBars(View root) {

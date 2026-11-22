@@ -10,7 +10,7 @@ A small, private, open-source music player for Android, in the spirit of Shuttle
 - Free software under the [GNU GPL v3 or later](LICENSE).
 - Android 13+.
 
-## Status: 0.2
+## Status: 0.3
 
 ### What it does
 
@@ -21,8 +21,9 @@ A small, private, open-source music player for Android, in the spirit of Shuttle
   search, or the whole Songs tab, can be played, queued, added to a playlist, tag-edited or
   blacklisted at once. Tap the **Lyre** title to reload.
 - **Blacklist you can switch off.** Hide songs, albums, artists, genres or folders (a folder
-  includes its subfolders) from their ⋮ menu or Settings. *Settings → Blacklist → Use blacklist*
-  turns it off and on without clearing it; entries can be removed one at a time.
+  includes its subfolders) from their ⋮ menu, or whole search results at once. *Settings →
+  Blacklist → Use blacklist* turns it off and on without clearing it. *Manage blacklist* opens it
+  on its own screen with search, type filters and multi-select removal.
 - **Volume normalization**, so you don't keep reaching for the volume:
   - *Auto* (default) measures each track's loudness the way ReplayGain 2.0 does (EBU R128),
     once per file, cached. Upcoming tracks are measured in the background, or measure the
@@ -60,7 +61,16 @@ A small, private, open-source music player for Android, in the spirit of Shuttle
 - Shuffle, repeat, sleep timer (minutes or end of track), gapless playback, lock-screen,
   notification, Bluetooth and headset controls (Media3), resume where you left off.
   External equalizer apps can attach to Lyre's audio.
-- Dark theme by default (light or follow system in Settings).
+- **Themes:** dark (default), black for OLED screens, light, or follow the system, with a choice of
+  accent color (aquamarine, blue, teal, indigo, purple, green).
+- **Equalizer:** 10 bands with presets, on the same audio effect as normalization (so it shares the
+  limiter). From Now Playing or Settings.
+- **Favorites:** heart on Now Playing, "Add to favorites" in menus (including for whole albums or
+  search results), a Favorites list on the Playlists tab, and a "Favorite" rule for dynamic playlists.
+- **Widgets:** a 4×1 and a 4×2 (with art), with previous / play-pause / next. Play resumes your last
+  queue even when Lyre isn't running.
+- **Backup and restore:** one JSON file with playlists, dynamic playlists, the blacklist, favorites,
+  play counts, loudness measurements and settings (Settings → Backup).
 
 ### Permissions
 

@@ -28,6 +28,8 @@ import java.util.Map;
  */
 public class SmartEditorActivity extends Activity {
 
+    private int themeVersion;
+
     static final String EXTRA_ID = "smart_id", EXTRA_PRESET = "smart_preset";
 
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -42,6 +44,8 @@ public class SmartEditorActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        Theme.apply(this);
+        themeVersion = Theme.version;
         Db db = LyreApp.get().db();
         id = getIntent().getLongExtra(EXTRA_ID, -1);
         smart = id >= 0 ? db.smart(id) : Smart.preset(getIntent().getIntExtra(EXTRA_PRESET, 0));
@@ -207,7 +211,8 @@ public class SmartEditorActivity extends Activity {
         box.addView(value, Ui.matchWrap());
 
         field.setOnClickListener(v -> Ui.choose(this, "Field", Smart.FIELD_NAMES, r.field, w -> {
-            boolean kindChanged = Smart.isText(w) != Smart.isText(r.field) || Smart.isDate(w) != Smart.isDate(r.field);
+            boolean kindChanged = Smart.isText(w) != Smart.isText(r.field) || Smart.isDate(w) != Smart.isDate(r.field)
+                    || Smart.isFlag(w) != Smart.isFlag(r.field);
             r.field = w;
             if (kindChanged) { r.op = 0; r.value = ""; }
             renderRules();
@@ -267,5 +272,12 @@ public class SmartEditorActivity extends Activity {
         smart.rules.removeIf(r -> Smart.needsValue(r.field, r.op) && r.value.trim().isEmpty());
         LyreApp.get().db().saveSmart(id, smart);
         finish();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Theme or accent changed in Settings while this screen was open.
+        if (themeVersion != Theme.version) recreate();
     }
 }
