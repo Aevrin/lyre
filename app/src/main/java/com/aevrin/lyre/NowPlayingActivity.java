@@ -39,6 +39,8 @@ import java.util.Locale;
 /** Full-screen player with the queue, sleep timer and normalization status. */
 public class NowPlayingActivity extends Activity implements Actions.Host {
 
+    static final String EXTRA_QUEUE = "show_queue";
+
     private int themeVersion;
 
     private Remote remote;
@@ -86,6 +88,10 @@ public class NowPlayingActivity extends Activity implements Actions.Host {
     protected void onStart() {
         super.onStart();
         remote.connect(c -> { update(); if (showQueue) renderQueue(); });
+        if (getIntent().getBooleanExtra(EXTRA_QUEUE, false) && !showQueue) {
+            getIntent().removeExtra(EXTRA_QUEUE);
+            toggleQueue();
+        }
         main.post(tick);
     }
 
@@ -99,6 +105,12 @@ public class NowPlayingActivity extends Activity implements Actions.Host {
     @Override public Activity activity() { return this; }
     @Override public Remote remote() { return remote; }
     @Override public void refresh() { update(); }
+    @Override
+    protected void onNewIntent(android.content.Intent intent) {
+        super.onNewIntent(intent);
+        if (intent.getBooleanExtra(EXTRA_QUEUE, false) && !showQueue) toggleQueue();
+    }
+
     @Override
     public void openGroup(int kind, String key) {
         startActivity(new android.content.Intent(this, MainActivity.class)
@@ -346,36 +358,22 @@ public class NowPlayingActivity extends Activity implements Actions.Host {
         shuffle.setImageResource(sh ? R.drawable.ic_shuffle : R.drawable.ic_shuffle_off);
         shuffle.setAlpha(1f);
         shuffle.setBackground(Ui.ripple(this, true));
-        shuffle.setImageTintList(ColorStateList.valueOf(sh ? (Theme.night(this) ? 0xFF34D399 : 0xFF059669)
-                : Ui.color(this, R.color.text_primary)));
+        shuffle.setImageTintList(ColorStateList.valueOf(sh ? green() : Ui.color(this, R.color.text_primary)));
         shuffle.setContentDescription(sh ? "Shuffle on" : "Shuffle off");
         int r = c.getRepeatMode();
         repeat.setImageResource(r == Player.REPEAT_MODE_ONE ? R.drawable.ic_repeat_one : R.drawable.ic_repeat);
-        modeLook(repeat, r != Player.REPEAT_MODE_OFF);
+        // Repeat: normal color when off, green when on (all or one).
+        repeat.setAlpha(1f);
+        repeat.setBackground(Ui.ripple(this, true));
+        repeat.setImageTintList(ColorStateList.valueOf(r != Player.REPEAT_MODE_OFF ? green()
+                : Ui.color(this, R.color.text_primary)));
+        repeat.setContentDescription(r == Player.REPEAT_MODE_ONE ? "Repeat one" : r == Player.REPEAT_MODE_ALL ? "Repeat all" : "Repeat off");
         updatePosition();
         updateStatus();
     }
 
-    /**
-     * Shuffle/repeat are always fully visible: off is the normal icon color; on is the
-     * accent color on a tinted circle, so the state reads at a glance.
-     */
-    private void modeLook(ImageButton b, boolean on) {
-        b.setAlpha(1f);
-        b.setImageTintList(ColorStateList.valueOf(Ui.color(this, on ? R.color.accent : R.color.text_primary)));
-        if (on) {
-            android.graphics.drawable.GradientDrawable circle = new android.graphics.drawable.GradientDrawable();
-            circle.setShape(android.graphics.drawable.GradientDrawable.OVAL);
-            circle.setColor((Ui.color(this, R.color.accent) & 0x00FFFFFF) | 0x33000000);
-            android.graphics.drawable.InsetDrawable inset = new android.graphics.drawable.InsetDrawable(circle,
-                    0, Ui.dp(this, 2), 0, Ui.dp(this, 2));
-            b.setBackground(new android.graphics.drawable.LayerDrawable(new android.graphics.drawable.Drawable[]{
-                    inset, Ui.ripple(this, true)}));
-        } else {
-            b.setBackground(Ui.ripple(this, true));
-        }
-        b.setContentDescription((b == shuffle ? "Shuffle " : "Repeat ") + (on ? "on" : "off"));
-    }
+    /** "On" color for shuffle and repeat, readable in both light and dark themes. */
+    private int green() { return Theme.night(this) ? 0xFF34D399 : 0xFF059669; }
 
     private void updatePosition() {
         MediaController c = remote.get();

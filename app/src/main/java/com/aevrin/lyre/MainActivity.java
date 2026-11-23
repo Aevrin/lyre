@@ -56,7 +56,7 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
     private static final int T_SONGS = 10, T_ALBUMS = 11, T_ARTISTS = 12, T_GENRES = 13, T_FOLDERS = 14,
             T_PLAYLISTS = 15, SEARCH = 20;
     private static final int[] TABS = {T_SONGS, T_ALBUMS, T_ARTISTS, T_GENRES, T_FOLDERS, T_PLAYLISTS};
-    private static final String[] TAB_NAMES = {"Songs", "Albums", "Artists", "Genres", "Folders", "Playlists"};
+    static final String[] TAB_NAMES = {"Songs", "Albums", "Artists", "Genres", "Folders", "Playlists"};
 
     private static final class Page {
         final int type;
@@ -80,6 +80,7 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
     private LinearLayoutManager lm;
     private RowAdapter adapter;
     private ItemTouchHelper dragger;
+    private FastScroller fastScroller;
     private LinearLayout tabStrip, header, searchBar, permissionPanel;
     private TextView headerTitle, headerSub, emptyText;
     private EditText searchBox;
@@ -118,6 +119,7 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
             @Override public void onEvents(@NonNull Player p, @NonNull Player.Events e) { updateMini(); }
         });
         int tab = Math.max(0, Math.min(prefs.tab(), TABS.length - 1));
+        if (!tabShown(tab)) tab = firstShownTab();
         stack.add(new Page(TABS[tab], null));
         library.addListener(this);
         if (library.hasPermission()) {
@@ -206,7 +208,7 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
         });
         top.addView(title);
         top.addView(Ui.spacer(this));
-        sortButton = Ui.icon(this, R.drawable.ic_queue, "Sort", v -> sortMenu());
+        sortButton = Ui.icon(this, R.drawable.ic_sort, "Sort", v -> sortMenu());
         top.addView(sortButton);
         top.addView(Ui.icon(this, R.drawable.ic_search, "Search", v -> openSearch()));
         top.addView(Ui.icon(this, R.drawable.ic_settings, "Settings",
@@ -254,6 +256,7 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
             t.setPadding(Ui.dp(this, 12), Ui.dp(this, 10), Ui.dp(this, 12), Ui.dp(this, 10));
             t.setBackground(Ui.ripple(this, false));
             t.setOnClickListener(v -> selectTab(idx));
+            t.setVisibility(tabShown(i) ? View.VISIBLE : View.GONE);
             tabStrip.addView(t);
         }
         hs.addView(tabStrip);
@@ -303,6 +306,12 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
             }
         });
         dragger.attachToRecyclerView(list);
+
+        FastScroller scroller = new FastScroller(this, list, lm);
+        scroller.setLabeler(this::sectionLabel);
+        body.addView(scroller, new FrameLayout.LayoutParams(scroller.preferredWidth(),
+                ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END));
+        fastScroller = scroller;
 
         emptyText = Ui.text(this, "", 15, R.color.text_muted, false);
         emptyText.setSingleLine(false);
@@ -354,6 +363,8 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
         texts.addView(miniTitle);
         texts.addView(miniArtist);
         row.addView(texts, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        row.addView(Ui.icon(this, R.drawable.ic_queue, "Queue", v -> startActivity(
+                new Intent(this, NowPlayingActivity.class).putExtra(NowPlayingActivity.EXTRA_QUEUE, true))));
         miniPlay = Ui.icon(this, R.drawable.ic_play, "Play/pause", v -> Remote.togglePlay(remote.get()));
         row.addView(miniPlay);
         row.addView(Ui.icon(this, R.drawable.ic_next, "Next", v -> {
@@ -401,6 +412,13 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
     // ---------------------------------------------------------------- navigation
 
     private Page top() { return stack.get(stack.size() - 1); }
+
+    private boolean tabShown(int i) { return (prefs.tabsShown() & (1 << i)) != 0; }
+
+    private int firstShownTab() {
+        for (int i = 0; i < TABS.length; i++) if (tabShown(i)) return i;
+        return 0;
+    }
 
     private void selectTab(int idx) {
         closeSearch(false);
@@ -489,12 +507,7 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
                 library.sortSongs(s, prefs.songSort());
                 if (prefs.songSortReversed()) java.util.Collections.reverse(s);
                 pageSongs = s;
-                if (!s.isEmpty()) {
-                    final List<Song> everything = s;
-                    rows.add(RowAdapter.Row.action(R.drawable.ic_more,
-                            "All " + Library.plural(s.size(), "song") + ": play, add to playlist, blacklist…",
-                            v -> bulkMenu(v, everything)));
-                }
+                if (!s.isEmpty()) rows.add(songBar(s));
                 addSongs(rows, s, false, null);
                 empty = !library.isLoaded() ? "Loading…" : emptyLibraryText();
                 break;
@@ -673,10 +686,7 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
                     List<Song> so = library.searchSongs(q);
                     if (!so.isEmpty()) {
                         if (all) rows.add(RowAdapter.Row.header("Songs"));
-                        final List<Song> found = so;
-                        rows.add(RowAdapter.Row.action(R.drawable.ic_more,
-                                "All " + Library.plural(so.size(), "song") + ": play, add to playlist, blacklist…",
-                                v -> bulkMenu(v, found)));
+                        rows.add(songBar(so));
                     }
                     int max = all ? 50 : 5000;
                     if (all && so.size() > max) {
@@ -699,10 +709,40 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
         header.setVisibility(detail && !searching ? View.VISIBLE : View.GONE);
         tabStrip.setVisibility(View.VISIBLE);
         adapter.set(rows);
+        list.post(() -> fastScroller.sync());
         emptyText.setText(perm && rows.isEmpty() ? empty : "");
         emptyText.setVisibility(perm && rows.isEmpty() ? View.VISIBLE : View.GONE);
         updateBack();
         updateMini();
+    }
+
+    /** Bubble text while dragging the scrollbar: first letter (or year/number) of the row there. */
+    private String sectionLabel(int pos) {
+        List<RowAdapter.Row> rows = adapter.rows();
+        for (int i = pos; i < rows.size(); i++) {
+            RowAdapter.Row r = rows.get(i);
+            if (r.type != RowAdapter.SONG && r.type != RowAdapter.GROUP) continue;
+            if (top().type == T_SONGS && r.song != null) {
+                switch (prefs.songSort()) {
+                    case Library.SORT_ARTIST: return initial(r.song.artist);
+                    case Library.SORT_ALBUM: return initial(r.song.album);
+                    case Library.SORT_YEAR: return r.song.year > 0 ? String.valueOf(r.song.year) : "?";
+                    case Library.SORT_ADDED: return "";
+                    default: return initial(r.song.title);
+                }
+            }
+            return initial(r.t1);
+        }
+        return "";
+    }
+
+    private static String initial(String s) {
+        if (s == null) return "";
+        String t = s.trim();
+        if (t.isEmpty()) return "";
+        int cp = t.codePointAt(0);
+        return Character.isLetter(cp) ? new String(Character.toChars(Character.toUpperCase(cp)))
+                : Character.isDigit(cp) ? "#" : t.substring(0, Character.charCount(cp));
     }
 
     private String emptyLibraryText() {
@@ -755,6 +795,15 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
             r.song = g.first();
         }
         return r;
+    }
+
+    /** "N songs" bar with shuffle all, play all and a menu for everything else. */
+    private RowAdapter.Row songBar(List<Song> songs) {
+        final List<Song> all = songs;
+        return RowAdapter.Row.bar(Library.plural(songs.size(), "song"),
+                v -> remote.play(all, 0, false),
+                v -> remote.play(all, 0, true),
+                anchor -> bulkMenu(anchor, all));
     }
 
     /** "N more…" row that switches the search to one result type. */

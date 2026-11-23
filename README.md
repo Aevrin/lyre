@@ -66,6 +66,8 @@ A small, private, open-source music player for Android, in the spirit of Shuttle
 - Shuffle, repeat (also on the notification and lock screen), sleep timer (minutes or end of track), gapless playback, lock-screen,
   notification, Bluetooth and headset controls (Media3), resume where you left off.
   External equalizer apps can attach to Lyre's audio.
+- **Layout:** choose which tabs show and the text size; long lists have a draggable scrollbar with a
+  letter bubble; song lists start with Shuffle all / Play all; the mini player has a queue button.
 - **Themes:** dark (default), black for OLED screens, light, or follow the system, with a choice of
   accent color (aquamarine, blue, teal, indigo, purple, green).
 - **Equalizer:** 10 bands with presets, on the same audio effect as normalization (so it shares the

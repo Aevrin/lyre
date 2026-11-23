@@ -56,7 +56,7 @@ final class Ui {
     static TextView text(Context c, String s, float sp, int colorRes, boolean bold) {
         TextView t = new TextView(c);
         t.setText(s);
-        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp * LyreApp.get().prefs().textScale());
         t.setTextColor(color(c, colorRes));
         if (bold) t.setTypeface(t.getTypeface(), android.graphics.Typeface.BOLD);
         t.setSingleLine(true);

@@ -69,6 +69,14 @@ public final class Prefs {
     public float[] eqGains() { return Eq.decode(sp.getString("eq_gains", "")); }
     public void eqGains(float[] g) { sp.edit().putString("eq_gains", Eq.encode(g)).apply(); }
 
+    /** Text size multiplier for Lyre's lists and screens. */
+    public float textScale() { return sp.getFloat("text_scale", 1f); }
+    public void textScale(float v) { sp.edit().putFloat("text_scale", v).apply(); }
+
+    /** Which library tabs show, as a bit set over MainActivity's tab order (all by default). */
+    public int tabsShown() { return sp.getInt("tabs_shown", 0x3F); }
+    public void tabsShown(int v) { sp.edit().putInt("tabs_shown", v).apply(); }
+
     public int tab() { return sp.getInt("tab", 0); }
     public void tab(int v) { sp.edit().putInt("tab", v).apply(); }
 

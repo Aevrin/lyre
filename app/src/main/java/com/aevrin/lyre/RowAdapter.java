@@ -25,7 +25,7 @@ import java.util.List;
 /** One adapter for every list: songs, groups, section headers and action rows. */
 final class RowAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
-    static final int SONG = 0, GROUP = 1, HEADER = 2, ACTION = 3;
+    static final int SONG = 0, GROUP = 1, HEADER = 2, ACTION = 3, BAR = 4;
 
     interface Anchored { void run(View anchor); }
 
@@ -36,6 +36,7 @@ final class RowAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         int icon = R.drawable.ic_note;
         boolean current;    // highlighted (e.g. playing now)
         View.OnClickListener click;
+        View.OnClickListener shuffle;   // BAR rows: the shuffle button (click = play)
         Anchored menu;
         Object tag;
 
@@ -43,6 +44,17 @@ final class RowAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             Row r = new Row();
             r.type = HEADER;
             r.t1 = title;
+            return r;
+        }
+
+        /** "N songs" with shuffle, play and ⋮ buttons. */
+        static Row bar(String title, View.OnClickListener play, View.OnClickListener shuffle, Anchored menu) {
+            Row r = new Row();
+            r.type = BAR;
+            r.t1 = title;
+            r.click = play;
+            r.shuffle = shuffle;
+            r.menu = menu;
             return r;
         }
 
@@ -97,7 +109,37 @@ final class RowAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             t.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             return new RecyclerView.ViewHolder(t) { };
         }
+        if (viewType == BAR) return new BarHolder(c);
         return new ItemHolder(c, viewType);
+    }
+
+    /** Header bar over a song list: count, shuffle all, play all, more. */
+    static final class BarHolder extends RecyclerView.ViewHolder {
+        final TextView title;
+        final ImageButton shuffle, play, more;
+
+        BarHolder(Context c) {
+            super(new LinearLayout(c));
+            LinearLayout row = (LinearLayout) itemView;
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(Ui.dp(c, 16), Ui.dp(c, 2), Ui.dp(c, 4), Ui.dp(c, 2));
+            row.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            title = Ui.text(c, "", 14, R.color.text_secondary, true);
+            row.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            shuffle = Ui.icon(c, R.drawable.ic_shuffle, "Shuffle all", null);
+            play = Ui.icon(c, R.drawable.ic_play, "Play all", null);
+            more = Ui.icon(c, R.drawable.ic_more, "More for all songs", null);
+            row.addView(shuffle);
+            row.addView(play);
+            row.addView(more);
+        }
+
+        void bind(Row r) {
+            title.setText(r.t1);
+            play.setOnClickListener(r.click);
+            shuffle.setOnClickListener(r.shuffle);
+            more.setOnClickListener(v -> { if (r.menu != null) r.menu.run(v); });
+        }
     }
 
     @Override
@@ -107,6 +149,7 @@ final class RowAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             ((TextView) holder.itemView).setText(r.t1);
             return;
         }
+        if (r.type == BAR) { ((BarHolder) holder).bind(r); return; }
         ((ItemHolder) holder).bind(r, dragStarter);
     }
 

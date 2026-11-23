@@ -221,6 +221,46 @@ public class SettingsActivity extends Activity implements Library.Listener {
             ((LyreApp) getApplication()).applyTheme(w);
             recreate();
         });
+        float[] scales = {0.9f, 1f, 1.15f, 1.3f};
+        String[] scaleNames = {"Small", "Default", "Large", "Larger"};
+        choice("Text size", scaleNames, indexOf(scales, prefs.textScale()), null, w -> {
+            prefs.textScale(scales[w]);
+            Theme.version++;
+            recreate();
+        });
+        TextView tabsRow = Ui.text(this, "", 14, R.color.accent, false);
+        LinearLayout tabs = new LinearLayout(this);
+        tabs.setOrientation(LinearLayout.VERTICAL);
+        tabs.setPadding(Ui.dp(this, 20), Ui.dp(this, 10), Ui.dp(this, 20), Ui.dp(this, 10));
+        tabs.setBackground(Ui.ripple(this, false));
+        tabs.addView(Ui.text(this, "Tabs", 16, R.color.text_primary, false));
+        tabs.addView(tabsRow);
+        Runnable showTabs = () -> {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < MainActivity.TAB_NAMES.length; i++) {
+                if ((prefs.tabsShown() & (1 << i)) != 0) sb.append(sb.length() > 0 ? ", " : "").append(MainActivity.TAB_NAMES[i]);
+            }
+            tabsRow.setText(sb.toString());
+        };
+        showTabs.run();
+        tabs.setOnClickListener(v -> {
+            boolean[] on = new boolean[MainActivity.TAB_NAMES.length];
+            for (int i = 0; i < on.length; i++) on[i] = (prefs.tabsShown() & (1 << i)) != 0;
+            new android.app.AlertDialog.Builder(this)
+                    .setTitle("Show tabs")
+                    .setMultiChoiceItems(MainActivity.TAB_NAMES, on, (d, w, c) -> on[w] = c)
+                    .setPositiveButton("OK", (d, w) -> {
+                        int bits = 0;
+                        for (int i = 0; i < on.length; i++) if (on[i]) bits |= 1 << i;
+                        if (bits == 0) { Ui.toast(this, "Keep at least one tab"); return; }
+                        prefs.tabsShown(bits);
+                        Theme.version++;   // the main screen rebuilds its tabs
+                        showTabs.run();
+                    })
+                    .setNegativeButton("Cancel", null)
+                    .show();
+        });
+        content.addView(tabs, Ui.matchWrap());
         choice("Accent color", Theme.ACCENT_NAMES, prefs.accent(), "Used for highlights, buttons and the playing song.", w -> {
             prefs.accent(w);
             Theme.version++;
