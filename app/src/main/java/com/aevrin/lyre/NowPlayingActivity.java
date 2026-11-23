@@ -341,7 +341,14 @@ public class NowPlayingActivity extends Activity implements Actions.Host {
         }
         play.setImageResource(c.getPlayWhenReady() ? R.drawable.ic_pause : R.drawable.ic_play);
         updateHeart(s);
-        modeLook(shuffle, c.getShuffleModeEnabled());
+        // Shuffle: straight arrows in the normal color when off, crossed arrows in green when on.
+        boolean sh = c.getShuffleModeEnabled();
+        shuffle.setImageResource(sh ? R.drawable.ic_shuffle : R.drawable.ic_shuffle_off);
+        shuffle.setAlpha(1f);
+        shuffle.setBackground(Ui.ripple(this, true));
+        shuffle.setImageTintList(ColorStateList.valueOf(sh ? (Theme.night(this) ? 0xFF34D399 : 0xFF059669)
+                : Ui.color(this, R.color.text_primary)));
+        shuffle.setContentDescription(sh ? "Shuffle on" : "Shuffle off");
         int r = c.getRepeatMode();
         repeat.setImageResource(r == Player.REPEAT_MODE_ONE ? R.drawable.ic_repeat_one : R.drawable.ic_repeat);
         modeLook(repeat, r != Player.REPEAT_MODE_OFF);
