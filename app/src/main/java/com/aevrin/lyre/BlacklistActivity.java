@@ -88,7 +88,7 @@ public class BlacklistActivity extends Activity implements Library.Listener, Act
 
     /** The hidden-song count is recomputed in the background after each change. */
     @Override
-    public void onLibraryChanged() { refresh(); }
+    public void onLibraryChanged() { redraw(); }
 
     @Override
     protected void onResume() {
@@ -148,7 +148,7 @@ public class BlacklistActivity extends Activity implements Library.Listener, Act
         selectionBar.addView(selCount, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         selectionBar.addView(Ui.button(this, "Select shown", v -> {
             for (Db.BlEntry e : shown) selected.add(e.id);
-            refresh();
+            redraw();
         }));
         selectionBar.addView(gap());
         Button remove = Ui.button(this, "Remove", v -> removeSelected());
@@ -216,10 +216,10 @@ public class BlacklistActivity extends Activity implements Library.Listener, Act
             c.setTextColor(Ui.color(this, on ? R.color.accent : R.color.text_muted));
             c.setBackground(on ? Ui.rounded(this, R.color.surface, 16) : null);
         }
-        refresh();
+        redraw();
     }
 
-    private void refresh() {
+    private void redraw() {
         Prefs p = LyreApp.get().prefs();
         summary.setText(all.isEmpty() ? "Empty. Blacklist songs, albums, artists, genres or folders from their ⋮ menu, or add a folder with +."
                 : (p.blacklistOn() ? "On, hiding " + Library.plural(library.hiddenCount(), "song")
@@ -365,7 +365,7 @@ public class BlacklistActivity extends Activity implements Library.Listener, Act
             sub.setText((Db.BL_SONG.equals(e.type) ? type + " · " + e.value : type) + inPl);
             itemView.setOnClickListener(v -> {
                 if (!selected.remove(e.id)) selected.add(e.id);
-                refresh();
+                redraw();
             });
             LinearLayout row = (LinearLayout) itemView;
             if (row.getChildCount() == 2) {
