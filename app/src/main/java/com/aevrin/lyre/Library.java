@@ -71,6 +71,7 @@ public final class Library {
     private volatile List<Group> albums, artists, genres, folders;
     private volatile boolean loaded;
     private volatile int hiddenCount;
+    private volatile java.util.Set<String> hiddenPaths = java.util.Collections.emptySet();
     private boolean observing;
 
     private final Runnable reloadSoon = this::reload;
@@ -220,6 +221,13 @@ public final class Library {
         }
         sortSongs(vis, SORT_TITLE);
         hiddenCount = src.size() - vis.size();
+        java.util.Set<String> hidden = new java.util.HashSet<>();
+        if (hiddenCount > 0) {
+            java.util.Set<Long> shown = new java.util.HashSet<>();
+            for (Song s : vis) shown.add(s.id);
+            for (Song s : src) if (!shown.contains(s.id)) hidden.add(s.path);
+        }
+        hiddenPaths = hidden;
         songs = vis;
         albums = artists = genres = folders = null;
     }
@@ -294,14 +302,28 @@ public final class Library {
         return !new Matcher(db.blacklist()).matches(s);
     }
 
-    /** Resolves stored playlist paths to visible songs, skipping missing files. */
+    /**
+     * Resolves stored playlist (and favorites) paths to songs, skipping files that are gone.
+     * The blacklist doesn't apply here: a song you put in a playlist yourself always plays there.
+     */
     public List<Song> resolve(List<String> paths) {
         List<Song> out = new ArrayList<>(paths.size());
-        Matcher m = prefs.blacklistOn() ? new Matcher(db.blacklist()) : null;
         for (String p : paths) {
             Song s = byPath.get(p);
-            if (s != null && (m == null || !m.matches(s))) out.add(s);
+            if (s != null) out.add(s);
         }
+        return out;
+    }
+
+    /** True if the blacklist is currently hiding this song from the library. */
+    public boolean isHidden(Song s) { return hiddenPaths.contains(s.path); }
+
+    /** Songs one blacklist entry covers (whether or not the blacklist is on). */
+    public List<Song> coveredBy(Db.BlEntry e) {
+        Matcher m = new Matcher(java.util.Collections.singletonList(e));
+        List<Song> out = new ArrayList<>();
+        for (Song s : all) if (m.matches(s)) out.add(s);
+        sortByAlbum(out);
         return out;
     }
 

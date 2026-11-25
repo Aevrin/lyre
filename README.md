@@ -25,6 +25,10 @@ A small, private, open-source music player for Android, in the spirit of Shuttle
   includes its subfolders) from their ⋮ menu, or whole search results at once. *Settings →
   Blacklist → Use blacklist* turns it off and on without clearing it. *Manage blacklist* opens it
   on its own screen with search, type filters and multi-select removal.
+  Blacklisted songs stay out of the library, search, Shuffle/Play all and dynamic playlists, but a
+  song you put in a playlist (Favorites included) still plays there, marked "Blacklisted". From the
+  blacklist screen, ⋮ adds an entry's songs to a playlist or Favorites; each entry shows how many of
+  its songs are in playlists. M3U imports bring in blacklisted songs too.
 - **Volume normalization**, so you don't keep reaching for the volume:
   - *Auto* (default) measures each track's loudness the way ReplayGain 2.0 does (EBU R128),
     once per file, cached. Upcoming tracks are measured in the background, or measure the

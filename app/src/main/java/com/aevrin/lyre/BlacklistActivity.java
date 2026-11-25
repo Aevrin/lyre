@@ -33,7 +33,7 @@ import java.util.Set;
  * The blacklist on its own screen, so a long list doesn't swamp Settings:
  * search, filter by type, remove one entry, or select several and remove them.
  */
-public class BlacklistActivity extends Activity implements Library.Listener {
+public class BlacklistActivity extends Activity implements Library.Listener, Actions.Host {
 
     private int themeVersion;
     private static final String[] TYPES = {null, Db.BL_FOLDER, Db.BL_SONG, Db.BL_ALBUM, Db.BL_ARTIST, Db.BL_GENRE};
@@ -49,6 +49,10 @@ public class BlacklistActivity extends Activity implements Library.Listener {
     private LinearLayout chips, selectionBar;
     private TextView summary, selCount;
     private final Adapter adapter = new Adapter();
+    private Remote remote;
+    private java.util.Map<String, Integer> use = new java.util.HashMap<>();
+    // Per entry: how many of its songs are in a playlist (computed on reload).
+    private final java.util.Map<Long, Integer> entryUse = new java.util.HashMap<>();
 
     /** "1 folder", "200 songs". */
     static String count(int n, String type) {
@@ -62,10 +66,19 @@ public class BlacklistActivity extends Activity implements Library.Listener {
         themeVersion = Theme.version;
         db = LyreApp.get().db();
         library = LyreApp.get().library();
+        remote = new Remote(this, null);
         setContentView(build());
         reload();
         library.addListener(this);
     }
+
+    @Override protected void onStart() { super.onStart(); remote.connect(null); }
+    @Override protected void onStop() { super.onStop(); remote.release(); }
+
+    @Override public Activity activity() { return this; }
+    @Override public Remote remote() { return remote; }
+    @Override public void openGroup(int kind, String key) { }
+    @Override public void refresh() { reload(); }
 
     @Override
     protected void onDestroy() {
@@ -161,6 +174,18 @@ public class BlacklistActivity extends Activity implements Library.Listener {
 
     private void reload() {
         all = db.blacklist();
+        use = db.playlistUse();
+        entryUse.clear();
+        for (Db.BlEntry e : all) {
+            if (Db.BL_SONG.equals(e.type)) {
+                Integer n = use.get(e.value);
+                entryUse.put(e.id, n == null ? 0 : n);
+            } else {
+                int n = 0;
+                for (Song s : library.coveredBy(e)) if (use.containsKey(s.path)) n++;
+                entryUse.put(e.id, n);
+            }
+        }
         selected.retainAll(ids(all));
         applyFilter();
     }
@@ -198,7 +223,8 @@ public class BlacklistActivity extends Activity implements Library.Listener {
         Prefs p = LyreApp.get().prefs();
         summary.setText(all.isEmpty() ? "Empty. Blacklist songs, albums, artists, genres or folders from their ⋮ menu, or add a folder with +."
                 : (p.blacklistOn() ? "On, hiding " + Library.plural(library.hiddenCount(), "song")
-                : "Off (switch it on in Settings)") + ". Tap entries to select them; × removes one.");
+                : "Off (switch it on in Settings)") + ". Songs you add to a playlist (or Favorites) still play there. "
+                + "Tap entries to select them; ⋮ adds their songs to a playlist.");
         selCount.setText(selected.isEmpty() ? "" : selected.size() + " selected");
         selectionBar.setVisibility(all.isEmpty() ? View.GONE : View.VISIBLE);
         adapter.notifyDataSetChanged();
@@ -214,6 +240,68 @@ public class BlacklistActivity extends Activity implements Library.Listener {
                     library.refilter();
                     reload();
                 });
+    }
+
+    /** ⋮ on an entry: add its songs to a playlist or Favorites, see them, or remove the entry. */
+    private void entryMenu(View anchor, Db.BlEntry e) {
+        boolean single = Db.BL_SONG.equals(e.type);
+        List<Song> songs = library.coveredBy(e);
+        android.widget.PopupMenu m = new android.widget.PopupMenu(this, anchor);
+        if (!single) m.getMenu().add(0, 1, 0, "Show songs (" + songs.size() + ")…");
+        m.getMenu().add(0, 2, 0, single ? "Add to playlist…" : "Add all to playlist…");
+        m.getMenu().add(0, 3, 0, single ? "Add to favorites" : "Add all to favorites");
+        if (single && !songs.isEmpty()) m.getMenu().add(0, 4, 0, "Play");
+        m.getMenu().add(0, 5, 0, "Remove from blacklist");
+        m.setOnMenuItemClickListener(it -> {
+            switch (it.getItemId()) {
+                case 1: showSongs(e, songs); break;
+                case 2: if (songs.isEmpty()) noSongs(); else Actions.addToPlaylist(this, songs); break;
+                case 3: if (songs.isEmpty()) noSongs(); else Actions.favoriteAll(this, songs); break;
+                case 4: remote.play(songs, 0, false); break;
+                case 5:
+                    db.removeBlacklist(e.id);
+                    selected.remove(e.id);
+                    library.refilter();
+                    reload();
+                    break;
+                default: return false;
+            }
+            return true;
+        });
+        m.show();
+    }
+
+    private void noSongs() { Ui.toast(this, "No songs in the library match this entry right now"); }
+
+    /** Songs a folder/artist/album/genre entry hides; pick some to add to a playlist or Favorites. */
+    private void showSongs(Db.BlEntry e, List<Song> songs) {
+        if (songs.isEmpty()) { noSongs(); return; }
+        String[] names = new String[songs.size()];
+        boolean[] checked = new boolean[songs.size()];
+        for (int i = 0; i < songs.size(); i++) {
+            Song s = songs.get(i);
+            Integer n = use.get(s.path);
+            names[i] = s.title + " — " + s.artist + (n != null && n > 0 ? "  (in " + Library.plural(n, "playlist") + ")" : "");
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle(e.label == null ? e.value : e.label)
+                .setMultiChoiceItems(names, checked, (d, w, c) -> checked[w] = c)
+                .setPositiveButton("Add to playlist…", (d, w) -> {
+                    List<Song> pick = picked(songs, checked);
+                    if (pick.isEmpty()) Ui.toast(this, "Tick some songs first"); else Actions.addToPlaylist(this, pick);
+                })
+                .setNeutralButton("Add to favorites", (d, w) -> {
+                    List<Song> pick = picked(songs, checked);
+                    if (pick.isEmpty()) Ui.toast(this, "Tick some songs first"); else Actions.favoriteAll(this, pick);
+                })
+                .setNegativeButton("Close", null)
+                .show();
+    }
+
+    private static List<Song> picked(List<Song> songs, boolean[] checked) {
+        List<Song> out = new ArrayList<>();
+        for (int i = 0; i < songs.size(); i++) if (checked[i]) out.add(songs.get(i));
+        return out;
     }
 
     /** Pick from the folders that hold music, plus their parents. */
@@ -270,21 +358,20 @@ public class BlacklistActivity extends Activity implements Library.Listener {
             check.setChecked(selected.contains(e.id));
             title.setText(e.label == null ? e.value : e.label);
             String type = e.type.isEmpty() ? "" : e.type.substring(0, 1).toUpperCase(Locale.ROOT) + e.type.substring(1);
-            sub.setText(Db.BL_SONG.equals(e.type) ? type + " · " + e.value : type);
+            Integer n = entryUse.get(e.id);
+            String inPl = n == null || n == 0 ? ""
+                    : Db.BL_SONG.equals(e.type) ? " · in " + Library.plural(n, "playlist")
+                    : " · " + Library.plural(n, "song") + " in playlists";
+            sub.setText((Db.BL_SONG.equals(e.type) ? type + " · " + e.value : type) + inPl);
             itemView.setOnClickListener(v -> {
                 if (!selected.remove(e.id)) selected.add(e.id);
                 refresh();
             });
             LinearLayout row = (LinearLayout) itemView;
             if (row.getChildCount() == 2) {
-                row.addView(Ui.icon(BlacklistActivity.this, R.drawable.ic_close, "Remove", null));
+                row.addView(Ui.icon(BlacklistActivity.this, R.drawable.ic_more, "More", null));
             }
-            row.getChildAt(2).setOnClickListener(v -> {
-                db.removeBlacklist(e.id);
-                selected.remove(e.id);
-                library.refilter();
-                reload();
-            });
+            row.getChildAt(2).setOnClickListener(v -> entryMenu(v, e));
         }
     }
 }

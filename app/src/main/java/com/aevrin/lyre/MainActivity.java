@@ -623,7 +623,7 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
                 for (Song s : songs) dur += s.duration;
                 int missing = paths.size() - songs.size();
                 headerSub.setText(Library.plural(songs.size(), "song") + " · " + Library.time(dur)
-                        + (missing > 0 ? " · " + missing + " missing or hidden" : ""));
+                        + (missing > 0 ? " · " + missing + " missing" : ""));
                 addSongs(rows, songs, false, id);
                 if (missing == 0) adapter.setDragStarter(h -> dragger.startDrag(h));
                 empty = "Empty playlist. Add songs from their ⋮ menu.";
@@ -770,6 +770,7 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
                 r.t1 = s.title;
                 r.t2 = s.artist + " · " + s.album;
             }
+            if (library.isHidden(s)) r.t2 = "⊘ Blacklisted · " + r.t2;
             r.t3 = Library.time(s.duration);
             r.click = v -> remote.play(queue, idx, false);
             r.menu = playlistId == null
@@ -1088,7 +1089,8 @@ public class MainActivity extends Activity implements Library.Listener, Actions.
                 PlaylistIo.export(getContentResolver(), uri, songs, prefs.m3uRelative());
                 Ui.toast(this, "Exported " + Library.plural(songs.size(), "song"));
             } else if (req == REQ_IMPORT) {
-                PlaylistIo.Imported im = PlaylistIo.read(getContentResolver(), uri, library.songs());
+                // Importing is deliberate, so blacklisted songs come in too.
+                PlaylistIo.Imported im = PlaylistIo.read(getContentResolver(), uri, library.all());
                 String name = PlaylistIo.nameFromDocument(getContentResolver(), uri);
                 long id = db.createPlaylist(name);
                 db.addToPlaylist(id, im.paths);

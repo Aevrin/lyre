@@ -1,6 +1,3 @@
-• Shuffle and repeat: plain when off, green when on. Shuffle shows straight arrows when off.
-• Song lists have a bar with Shuffle all, Play all and more.
-• Queue button on the mini player; sort has its own icon.
-• Drag the scrollbar on the right to jump through long lists.
-• Choose which tabs show, and the text size (Settings → Appearance).
-• Car and Bluetooth browsing.
+• Blacklisted songs you add to a playlist (or Favorites) now play there; they stay out of the library, search and dynamic playlists. M3U imports include them.
+• Blacklist screen: ⋮ adds an entry's songs to a playlist or Favorites, and shows which are already in playlists.
+• Shuffle and repeat turn green when on.

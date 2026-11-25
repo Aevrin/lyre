@@ -319,6 +319,19 @@ public final class Db extends SQLiteOpenHelper {
         getWritableDatabase().updateWithOnConflict("favorites", v, "path=?", new String[]{oldPath}, SQLiteDatabase.CONFLICT_IGNORE);
     }
 
+    /** path → number of playlists (Favorites counts as one) the file is in. */
+    public java.util.Map<String, Integer> playlistUse() {
+        java.util.Map<String, Integer> m = new java.util.HashMap<>();
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT path, COUNT(DISTINCT playlist_id) FROM playlist_items GROUP BY path", null)) {
+            while (c.moveToNext()) m.put(c.getString(0), c.getInt(1));
+        }
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT path FROM favorites", null)) {
+            while (c.moveToNext()) m.merge(c.getString(0), 1, Integer::sum);
+        }
+        return m;
+    }
+
     // ---------------------------------------------------------------- blacklist
 
     public List<BlEntry> blacklist() {
