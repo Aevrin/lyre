@@ -98,9 +98,15 @@ final class Normalizer {
     /** Works out and applies the gain for the song that just started. */
     void apply(Song s) {
         current = s;
-        if (s == null || prefs.normMode() == Prefs.NORM_OFF) {
+        previewCustom = null;
+        if (s == null) {
             set(0f);
-            info = new Info(0f, prefs.normMode() == Prefs.NORM_OFF ? "Off" : "—");
+            info = new Info(0f, "—");
+            return;
+        }
+        if (prefs.normMode() == Prefs.NORM_OFF) {
+            // No normalization, but a song's own volume adjustment still applies.
+            decide(s, null);
             return;
         }
         // Apply what we know right away (cached), then refine off the main thread.
@@ -146,31 +152,70 @@ final class Normalizer {
         });
     }
 
-    private void decide(Song s, Db.Gain g) {
+    /** Result of working out a song's gain. */
+    static final class Plan {
+        float base;        // automatic gain incl. pre-amp (0 when normalization is off)
+        float custom;      // the song's own adjustment
+        float total;       // what's applied, after limits
+        boolean limited;   // hit the boost/cut limit
+        String source;
+    }
+
+    /** Works out a song's gain from its cached loudness info, settings and custom adjustment. */
+    static Plan plan(Prefs prefs, Db.Gain g, float custom) {
+        Plan p = new Plan();
+        p.custom = custom;
         int mode = prefs.normMode();
-        float target = prefs.normTarget();
-        float offset = target - RG_REFERENCE;
-        float gain;
-        String src;
-        boolean measured = g != null && !Float.isNaN(g.lufs);
-        boolean rgT = g != null && !Float.isNaN(g.rgTrack);
-        boolean rgA = g != null && !Float.isNaN(g.rgAlbum);
-        if (mode == Prefs.NORM_ALBUM && rgA) {
-            gain = g.rgAlbum + offset; src = "ReplayGain album";
-        } else if ((mode == Prefs.NORM_TRACK || mode == Prefs.NORM_ALBUM) && rgT) {
-            gain = g.rgTrack + offset; src = "ReplayGain track";
-        } else if (measured) {
-            gain = target - g.lufs; src = String.format(java.util.Locale.ROOT, "Measured %.1f LUFS", g.lufs);
-        } else if (rgT) {
-            gain = g.rgTrack + offset; src = "ReplayGain track";
+        if (mode == Prefs.NORM_OFF) {
+            p.base = 0f;
+            p.source = "Normalization off";
         } else {
-            gain = prefs.fallbackGain(); src = mode == Prefs.NORM_AUTO ? "Default (measuring…)" : "Default (no tags)";
+            float target = prefs.normTarget();
+            float offset = target - RG_REFERENCE;
+            boolean measured = g != null && !Float.isNaN(g.lufs);
+            boolean rgT = g != null && !Float.isNaN(g.rgTrack);
+            boolean rgA = g != null && !Float.isNaN(g.rgAlbum);
+            if (mode == Prefs.NORM_ALBUM && rgA) {
+                p.base = g.rgAlbum + offset; p.source = "ReplayGain album";
+            } else if ((mode == Prefs.NORM_TRACK || mode == Prefs.NORM_ALBUM) && rgT) {
+                p.base = g.rgTrack + offset; p.source = "ReplayGain track";
+            } else if (measured) {
+                p.base = target - g.lufs; p.source = String.format(java.util.Locale.ROOT, "Measured %.1f LUFS", g.lufs);
+            } else if (rgT) {
+                p.base = g.rgTrack + offset; p.source = "ReplayGain track";
+            } else {
+                p.base = prefs.fallbackGain();
+                p.source = mode == Prefs.NORM_AUTO ? "Default (measuring…)" : "Default (no tags)";
+            }
+            p.base += prefs.preamp();
         }
-        gain += prefs.preamp();
-        gain = Math.max(MAX_CUT, Math.min(MAX_BOOST, gain));
+        float want = p.base + custom;
+        p.total = Math.max(MAX_CUT, Math.min(MAX_BOOST, want));
+        p.limited = p.total != want;
+        if (custom != 0f) p.source += String.format(java.util.Locale.ROOT, ", custom %+.1f dB", custom);
+        if (p.limited) p.source += want > 0 ? ", at the +12 dB limit" : ", at the −24 dB limit";
+        return p;
+    }
+
+    private Db.Gain lastRecord;
+    private Float previewCustom;   // live value while the volume dialog is open for the current song
+
+    private void decide(Song s, Db.Gain g) {
+        lastRecord = g;
+        float custom = previewCustom != null ? previewCustom : db.volume(s.path);
+        Plan p = plan(prefs, g, custom);
+        float gain = p.total;
+        String src = p.source;
         if (dp == null && gain > 0) { src += ", can't boost"; gain = 0; }
         set(gain);
         info = new Info(gain, src);
+    }
+
+    /** While the volume dialog is open: hear a custom value on the current song without saving it. */
+    void preview(Song s, Float custom) {
+        if (current == null || s == null || current.id != s.id) return;
+        previewCustom = custom;
+        decide(current, lastRecord);
     }
 
     private float lastGain;

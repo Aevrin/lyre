@@ -251,6 +251,29 @@ public class TagEditorActivity extends Activity {
             form.addView(e, Ui.matchWrap());
             edits.put(k, e);
         }
+        // Volume isn't a tag; it's saved in Lyre right away and survives tag edits.
+        TextView vl = Ui.text(this, "Volume", 13, R.color.accent, true);
+        vl.setPadding(0, Ui.dp(this, 18), 0, 0);
+        form.addView(vl);
+        LinearLayout vrow = new LinearLayout(this);
+        Ui.center(vrow);
+        TextView vval = Ui.text(this, "", 15, R.color.text_primary, false);
+        vrow.addView(vval, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        Runnable showVol = () -> {
+            Db db = LyreApp.get().db();
+            float v = db.volume(songs.get(0).path);
+            boolean same = true;
+            for (Song x : songs) if (Math.abs(db.volume(x.path) - v) > 0.01f) { same = false; break; }
+            vval.setText(same ? VolumeDialog.label(v) : "Various");
+        };
+        showVol.run();
+        vrow.addView(Ui.button(this, "Adjust…", v -> VolumeDialog.show(this, songs, showVol)));
+        form.addView(vrow, Ui.matchWrap());
+        TextView vnote = Ui.text(this, "For songs that are quiet overall but have a loud moment. Saved right away, "
+                + "separately from the tags.", 12, R.color.text_muted, false);
+        vnote.setSingleLine(false);
+        form.addView(vnote);
+
         if (songs.size() > 1) {
             TextView note = Ui.text(this, "Clearing a field that shows a shared value removes it from every song.",
                     12, R.color.text_muted, false);

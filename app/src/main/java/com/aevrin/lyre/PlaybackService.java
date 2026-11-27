@@ -555,6 +555,9 @@ public class PlaybackService extends MediaLibraryService {
     public boolean canBoost() { return normalizer.canBoost(); }
     public void reapplyGain() { normalizer.reapply(); }
     public void applyEq() { normalizer.applyEq(); }
+    /** Live preview of a custom volume on the current song (null ends the preview). */
+    public void previewVolume(Song s, Float custom) { normalizer.preview(s, custom); }
+    @Nullable public Song current() { return currentSong(); }
     public void measureAll() { normalizer.measureAll(library.songs()); }
     public void cancelMeasureAll() { normalizer.cancelBulk(); }
     public boolean measuring() { return normalizer.bulkRunning(); }

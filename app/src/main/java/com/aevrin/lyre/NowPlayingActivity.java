@@ -389,7 +389,7 @@ public class NowPlayingActivity extends Activity implements Actions.Host {
         StringBuilder sb = new StringBuilder();
         if (svc != null) {
             Normalizer.Info i = svc.normInfo();
-            if (LyreApp.get().prefs().normMode() == Prefs.NORM_OFF) {
+            if (LyreApp.get().prefs().normMode() == Prefs.NORM_OFF && Math.abs(i.gainDb) < 0.01f) {
                 sb.append("Normalization off");
             } else {
                 sb.append(String.format(Locale.ROOT, "Normalized %+.1f dB · %s", i.gainDb, i.source));
@@ -544,7 +544,8 @@ public class NowPlayingActivity extends Activity implements Actions.Host {
         MediaController c = remote.get();
         Song s = c == null ? null : Remote.song(c.getCurrentMediaItem());
         if (s == null) return;
-        Actions.song(this, anchor, s, null, null);
+        Actions.song(this, anchor, s, "Volume for this song…",
+                () -> VolumeDialog.show(this, java.util.Collections.singletonList(s), this::updateStatus));
     }
 
     @Override

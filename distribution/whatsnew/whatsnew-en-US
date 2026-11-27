@@ -1,3 +1,2 @@
-• Blacklisted songs you add to a playlist (or Favorites) now play there; they stay out of the library, search and dynamic playlists. M3U imports include them.
-• Blacklist screen: ⋮ adds an entry's songs to a playlist or Favorites, and shows which are already in playlists.
-• Shuffle and repeat turn green when on.
+• Volume for this song: adjust a song that's quiet overall but has a loud moment, on top of normalization. From Now Playing's ⋮ menu (heard live) or the tag editor, also for whole albums. Kept through tag edits and backups.
+• Blacklisted songs you add to a playlist now play there.

@@ -46,7 +46,7 @@ public final class Db extends SQLiteOpenHelper {
     }
 
     public Db(Context c) {
-        super(c, "lyre.db", null, 4);
+        super(c, "lyre.db", null, 5);
     }
 
     @Override
@@ -59,6 +59,7 @@ public final class Db extends SQLiteOpenHelper {
         createV2(db);
         createV3(db);
         createV4(db);
+        createV5(db);
     }
 
     @Override
@@ -66,6 +67,34 @@ public final class Db extends SQLiteOpenHelper {
         if (oldV < 2) createV2(db);
         if (oldV < 3) createV3(db);
         if (oldV < 4) createV4(db);
+        if (oldV < 5) createV5(db);
+    }
+
+    /**
+     * Version 5: per-song volume adjustments (dB on top of automatic). Kept apart from the
+     * loudness cache, which is dropped whenever a file changes (e.g. after a tag edit).
+     */
+    private static void createV5(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS volume (path TEXT PRIMARY KEY, offset REAL NOT NULL)");
+    }
+
+    /** A song's custom volume adjustment in dB, 0 for none. */
+    public float volume(String path) {
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT offset FROM volume WHERE path=?", new String[]{path})) {
+            return c.moveToFirst() ? c.getFloat(0) : 0f;
+        }
+    }
+
+    /** Sets (or with 0, clears) a song's custom volume adjustment. */
+    public void setVolume(String path, float offset) {
+        if (Math.abs(offset) < 0.01f) {
+            getWritableDatabase().delete("volume", "path=?", new String[]{path});
+            return;
+        }
+        ContentValues v = new ContentValues();
+        v.put("path", path);
+        v.put("offset", offset);
+        getWritableDatabase().insertWithOnConflict("volume", null, v, SQLiteDatabase.CONFLICT_REPLACE);
     }
 
     /** Version 4: favorites. */
@@ -317,6 +346,7 @@ public final class Db extends SQLiteOpenHelper {
         getWritableDatabase().update("playlist_items", v, "path=?", new String[]{oldPath});
         getWritableDatabase().updateWithOnConflict("plays", v, "path=?", new String[]{oldPath}, SQLiteDatabase.CONFLICT_IGNORE);
         getWritableDatabase().updateWithOnConflict("favorites", v, "path=?", new String[]{oldPath}, SQLiteDatabase.CONFLICT_IGNORE);
+        getWritableDatabase().updateWithOnConflict("volume", v, "path=?", new String[]{oldPath}, SQLiteDatabase.CONFLICT_IGNORE);
     }
 
     /** path → number of playlists (Favorites counts as one) the file is in. */
@@ -426,7 +456,7 @@ public final class Db extends SQLiteOpenHelper {
     // ---------------------------------------------------------------- backup
 
     /** Tables included in a backup. */
-    static final String[] BACKUP_TABLES = {"playlists", "playlist_items", "smart", "blacklist", "plays", "favorites", "gains"};
+    static final String[] BACKUP_TABLES = {"playlists", "playlist_items", "smart", "blacklist", "plays", "favorites", "gains", "volume"};
 
     org.json.JSONArray dump(String table) throws org.json.JSONException {
         org.json.JSONArray rows = new org.json.JSONArray();

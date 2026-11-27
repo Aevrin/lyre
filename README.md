@@ -35,6 +35,9 @@ A small, private, open-source music player for Android, in the spirit of Shuttle
     whole library at once from Settings. ReplayGain tags are used until a track is measured.
   - *ReplayGain track / album* uses tags from your tagger, falling back to the measurement.
   - Target loudness, pre-amp and the gain for not-yet-measured tracks are adjustable.
+  - *Volume for this song* (Now Playing ⋮, or the tag editor for one or many songs): an adjustment
+    of ±12 dB on top of the automatic gain, for songs that measure loud because of one loud moment
+    but sound quiet. Heard live while you drag; saved in Lyre, kept through tag edits and backups.
   - Gain is applied with Android's DynamicsProcessing effect plus a limiter, so boosting
     quiet tracks can't clip. Now Playing shows the gain applied to the current track.
 - **Tag editor.** Title, artist, album, album artist, genre, year, track, disc, composer,

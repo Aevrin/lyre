@@ -193,6 +193,8 @@ final class Actions {
                 + "\nSize: " + String.format(java.util.Locale.ROOT, "%.1f MB", s.size / 1048576.0)
                 + "\nFile: " + s.path;
         Db.Gain g = LyreApp.get().db().gain(s);
+        float vol = LyreApp.get().db().volume(s.path);
+        if (Math.abs(vol) > 0.01f) msg += String.format(java.util.Locale.ROOT, "\nCustom volume: %+.1f dB", vol);
         Smart.Stat st = LyreApp.get().db().stat(s.path);
         msg += "\nPlays: " + (st == null ? 0 : st.plays) + (st != null && st.skips > 0 ? " (skipped " + st.skips + ")" : "");
         if (st != null && st.lastPlayed > 0) {
